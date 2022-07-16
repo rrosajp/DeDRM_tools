@@ -69,10 +69,10 @@ class SafeUnbuffered:
     def __init__(self, stream):
         self.stream = stream
         self.encoding = stream.encoding
-        if self.encoding == None:
+        if self.encoding is None:
             self.encoding = "utf-8"
     def write(self, data):
-        if isinstance(data,str) or isinstance(data,unicode):
+        if isinstance(data, (str, unicode)):
             # str for Python3, unicode for Python2
             data = data.encode(self.encoding,"replace")
         try:
@@ -126,7 +126,10 @@ def unicode_argv():
         return ["kindlekey.py"]
     else:
         argvencoding = sys.stdin.encoding or "utf-8"
-        return [arg if (isinstance(arg, str) or isinstance(arg,unicode)) else str(arg, argvencoding) for arg in sys.argv]
+        return [
+            arg if isinstance(arg, (str, unicode)) else str(arg, argvencoding)
+            for arg in sys.argv
+        ]
 
 class DrmException(Exception):
     pass
@@ -157,11 +160,8 @@ def primes(n):
     primeList = [2]
 
     for potentialPrime in range(3, n + 1, 2):
-        isItPrime = True
-        for prime in primeList:
-            if potentialPrime % prime == 0:
-                isItPrime = False
-        if isItPrime is True:
+        isItPrime = all(potentialPrime % prime != 0 for prime in primeList)
+        if isItPrime:
             primeList.append(potentialPrime)
 
     return primeList
@@ -198,7 +198,7 @@ def UnprotectHeaderData(encryptedData):
     passwdData = b'header_key_data'
     salt = b'HEADER.2011'
     key_iv = PBKDF2(passwdData, salt, dkLen=256, count=128)
-    return AES.new(key_iv[0:32], AES.MODE_CBC, key_iv[32:48]).decrypt(encryptedData)
+    return AES.new(key_iv[:32], AES.MODE_CBC, key_iv[32:48]).decrypt(encryptedData)
 
 # Routines unique to Mac and PC
 if iswindows:
@@ -257,9 +257,8 @@ if iswindows:
     GetVolumeSerialNumber = GetVolumeSerialNumber()
 
     def GetIDString():
-        vsn = GetVolumeSerialNumber()
         #print('Using Volume Serial Number for ID: '+vsn)
-        return vsn
+        return GetVolumeSerialNumber()
 
     def getLastError():
         GetLastError = kernel32.GetLastError
@@ -287,13 +286,14 @@ if iswindows:
                 size.value = len(buffer)
 
             # replace any non-ASCII values with 0xfffd
-            for i in range(0,len(buffer)):
+            for i in range(len(buffer)):
                 if buffer[i]>"\u007f":
                     #print "swapping char "+str(i)+" ("+buffer[i]+")"
                     buffer[i] = "\ufffd"
             # return utf-8 encoding of modified username
             #print "modified username:"+buffer.value
             return buffer.value.encode('utf-8')
+
         return GetUserName
     GetUserName = GetUserName()
 
@@ -308,11 +308,20 @@ if iswindows:
             entropyb = create_string_buffer(entropy)
             entropy = DataBlob(len(entropy), cast(entropyb, c_void_p))
             outdata = DataBlob()
-            if not _CryptUnprotectData(byref(indata), None, byref(entropy),
-                                       None, None, flags, byref(outdata)):
-                # raise DrmException("Failed to Unprotect Data")
-                return b'failed'
-            return string_at(outdata.pbData, outdata.cbData)
+            return (
+                string_at(outdata.pbData, outdata.cbData)
+                if _CryptUnprotectData(
+                    byref(indata),
+                    None,
+                    byref(entropy),
+                    None,
+                    None,
+                    flags,
+                    byref(outdata),
+                )
+                else b'failed'
+            )
+
         return CryptUnprotectData
     CryptUnprotectData = CryptUnprotectData()
 
@@ -363,41 +372,40 @@ if iswindows:
             print ('Could not find the folder in which to look for kinfoFiles.')
         else:
             # Probably not the best. To Fix (shouldn't ignore in encoding) or use utf-8
-            print("searching for kinfoFiles in " + path)
+            print(f"searching for kinfoFiles in {path}")
 
             # look for (K4PC 1.25.1 and later) .kinf2018 file
             kinfopath = path +'\\Amazon\\Kindle\\storage\\.kinf2018'
             if os.path.isfile(kinfopath):
                 found = True
-                print('Found K4PC 1.25+ kinf2018 file: ' + kinfopath)
+                print(f'Found K4PC 1.25+ kinf2018 file: {kinfopath}')
                 kInfoFiles.append(kinfopath)
 
             # look for (K4PC 1.9.0 and later) .kinf2011 file
             kinfopath = path +'\\Amazon\\Kindle\\storage\\.kinf2011'
             if os.path.isfile(kinfopath):
                 found = True
-                print('Found K4PC 1.9+ kinf2011 file: ' + kinfopath)
+                print(f'Found K4PC 1.9+ kinf2011 file: {kinfopath}')
                 kInfoFiles.append(kinfopath)
 
             # look for (K4PC 1.6.0 and later) rainier.2.1.1.kinf file
             kinfopath = path +'\\Amazon\\Kindle\\storage\\rainier.2.1.1.kinf'
             if os.path.isfile(kinfopath):
                 found = True
-                print('Found K4PC 1.6-1.8 kinf file: ' + kinfopath)
+                print(f'Found K4PC 1.6-1.8 kinf file: {kinfopath}')
                 kInfoFiles.append(kinfopath)
 
             # look for (K4PC 1.5.0 and later) rainier.2.1.1.kinf file
             kinfopath = path +'\\Amazon\\Kindle For PC\\storage\\rainier.2.1.1.kinf'
             if os.path.isfile(kinfopath):
                 found = True
-                print('Found K4PC 1.5 kinf file: ' + kinfopath)
+                print(f'Found K4PC 1.5 kinf file: {kinfopath}')
                 kInfoFiles.append(kinfopath)
-
            # look for original (earlier than K4PC 1.5.0) kindle-info files
             kinfopath = path +'\\Amazon\\Kindle For PC\\{AMAwzsaPaaZAzmZzZQzgZCAkZ3AjA_AY}\\kindle.info'
             if os.path.isfile(kinfopath):
                 found = True
-                print('Found K4PC kindle.info file: ' + kinfopath)
+                print(f'Found K4PC kindle.info file: {kinfopath}')
                 kInfoFiles.append(kinfopath)
 
         if not found:
@@ -471,7 +479,7 @@ if iswindows:
 
             # the first 32 chars of the first record of a group
             # is the MD5 hash of the key name encoded by charMap5
-            keyhash = item[0:32]
+            keyhash = item[:32]
 
             # the remainder of the first record when decoded with charMap5
             # has the ':' split char followed by the string representation
@@ -483,18 +491,12 @@ if iswindows:
             # read and store in rcnt records of data
             # that make up the contents value
             edlst = []
-            for i in range(rcnt):
+            for _ in range(rcnt):
                 item = items.pop(0)
                 edlst.append(item)
 
             # key names now use the new testMap8 encoding
-            if keyhash in namehashmap:
-                keyname=namehashmap[keyhash]
-                #print "keyname found from hash:",keyname
-            else:
-                keyname = keyhash
-                #print "keyname not found, hash is:",keyname
-
+            keyname = namehashmap.get(keyhash, keyhash)
             # the testMap8 encoded contents data has had a length
             # of chars (always odd) cut off of the front and moved
             # to the end to prevent decoding using testMap8 from
@@ -511,8 +513,8 @@ if iswindows:
             encdata = b"".join(edlst)
             #print "encrypted data:",encdata
             contlen = len(encdata)
-            noffset = contlen - primes(int(contlen/3))[-1]
-            pfx = encdata[0:noffset]
+            noffset = contlen - primes(contlen // 3)[-1]
+            pfx = encdata[:noffset]
             encdata = encdata[noffset:]
             encdata = encdata + pfx
             #print "rearranged data:",encdata
@@ -541,7 +543,7 @@ if iswindows:
             if len(cleartext)>0:
                 #print "cleartext data:",cleartext,":end data"
                 DB[keyname] = cleartext
-            #print keyname, cleartext
+                #print keyname, cleartext
 
         if len(DB)>6:
             # store values used in decryption
@@ -691,7 +693,7 @@ elif isosx:
             passwdData = encode(SHA256(sp),charMap2)
             salt = entropy
             key_iv = PBKDF2(passwdData, salt, count=0x800, dkLen=0x400)
-            self.key = key_iv[0:32]
+            self.key = key_iv[:32]
             self.iv = key_iv[32:48]
             self.crp.set_decrypt_key(self.key, self.iv)
 
@@ -708,52 +710,57 @@ elif isosx:
         found = False
         home = os.getenv('HOME')
         # check for  .kinf2018 file in new location (App Store Kindle for Mac)
-        testpath = home + '/Library/Containers/com.amazon.Kindle/Data/Library/Application Support/Kindle/storage/.kinf2018'
+        testpath = f'{home}/Library/Containers/com.amazon.Kindle/Data/Library/Application Support/Kindle/storage/.kinf2018'
+
         if os.path.isfile(testpath):
             kInfoFiles.append(testpath)
-            print('Found k4Mac kinf2018 file: ' + testpath)
+            print(f'Found k4Mac kinf2018 file: {testpath}')
             found = True
         # check for  .kinf2018 files
-        testpath = home + '/Library/Application Support/Kindle/storage/.kinf2018'
+        testpath = f'{home}/Library/Application Support/Kindle/storage/.kinf2018'
         if os.path.isfile(testpath):
             kInfoFiles.append(testpath)
-            print('Found k4Mac kinf2018 file: ' + testpath)
+            print(f'Found k4Mac kinf2018 file: {testpath}')
             found = True
         # check for  .kinf2011 file in new location (App Store Kindle for Mac)
-        testpath = home + '/Library/Containers/com.amazon.Kindle/Data/Library/Application Support/Kindle/storage/.kinf2011'
+        testpath = f'{home}/Library/Containers/com.amazon.Kindle/Data/Library/Application Support/Kindle/storage/.kinf2011'
+
         if os.path.isfile(testpath):
             kInfoFiles.append(testpath)
-            print('Found k4Mac kinf2011 file: ' + testpath)
+            print(f'Found k4Mac kinf2011 file: {testpath}')
             found = True
         # check for  .kinf2011 files from 1.10
-        testpath = home + '/Library/Application Support/Kindle/storage/.kinf2011'
+        testpath = f'{home}/Library/Application Support/Kindle/storage/.kinf2011'
         if os.path.isfile(testpath):
             kInfoFiles.append(testpath)
-            print('Found k4Mac kinf2011 file: ' + testpath)
+            print(f'Found k4Mac kinf2011 file: {testpath}')
             found = True
         # check for  .rainier-2.1.1-kinf files from 1.6
-        testpath = home + '/Library/Application Support/Kindle/storage/.rainier-2.1.1-kinf'
+        testpath = f'{home}/Library/Application Support/Kindle/storage/.rainier-2.1.1-kinf'
+
         if os.path.isfile(testpath):
             kInfoFiles.append(testpath)
-            print('Found k4Mac rainier file: ' + testpath)
+            print(f'Found k4Mac rainier file: {testpath}')
             found = True
         # check for  .kindle-info files from 1.4
-        testpath = home + '/Library/Application Support/Kindle/storage/.kindle-info'
+        testpath = f'{home}/Library/Application Support/Kindle/storage/.kindle-info'
         if os.path.isfile(testpath):
             kInfoFiles.append(testpath)
-            print('Found k4Mac kindle-info file: ' + testpath)
+            print(f'Found k4Mac kindle-info file: {testpath}')
             found = True
         # check for  .kindle-info file from 1.2.2
-        testpath = home + '/Library/Application Support/Amazon/Kindle/storage/.kindle-info'
+        testpath = f'{home}/Library/Application Support/Amazon/Kindle/storage/.kindle-info'
+
         if os.path.isfile(testpath):
             kInfoFiles.append(testpath)
-            print('Found k4Mac kindle-info file: ' + testpath)
+            print(f'Found k4Mac kindle-info file: {testpath}')
             found = True
         # check for  .kindle-info file from 1.0 beta 1 (27214)
-        testpath = home + '/Library/Application Support/Amazon/Kindle for Mac/storage/.kindle-info'
+        testpath = f'{home}/Library/Application Support/Amazon/Kindle for Mac/storage/.kindle-info'
+
         if os.path.isfile(testpath):
             kInfoFiles.append(testpath)
-            print('Found k4Mac kindle-info file: ' + testpath)
+            print(f'Found k4Mac kindle-info file: {testpath}')
             found = True
         if not found:
             print('No k4Mac kindle-info/rainier/kinf2011 files have been found.')
@@ -834,7 +841,6 @@ elif isosx:
                     #print ("sp",sp)
                     #print ("passwd",passwd)
                     #print ("key",key)
-
                # loop through the item records until all are processed
                 while len(items) > 0:
 
@@ -843,7 +849,7 @@ elif isosx:
 
                     # the first 32 chars of the first record of a group
                     # is the MD5 hash of the key name encoded by charMap5
-                    keyhash = item[0:32]
+                    keyhash = item[:32]
                     keyname = b'unknown'
 
                     # unlike K4PC the keyhash is not used in generating entropy
@@ -860,15 +866,19 @@ elif isosx:
                     # read and store in rcnt records of data
                     # that make up the contents value
                     edlst = []
-                    for i in range(rcnt):
+                    for _ in range(rcnt):
                         item = items.pop(0)
                         edlst.append(item)
 
-                    keyname = b'unknown'
-                    for name in names:
-                        if encodeHash(name,testMap8) == keyhash:
-                            keyname = name
-                            break
+                    keyname = next(
+                        (
+                            name
+                            for name in names
+                            if encodeHash(name, testMap8) == keyhash
+                        ),
+                        b'unknown',
+                    )
+
                     if keyname == b'unknown':
                         keyname = keyhash
 
@@ -889,8 +899,8 @@ elif isosx:
                     # now properly split and recombine
                     # by moving noffset chars from the start of the
                     # string to the end of the string
-                    noffset = contlen - primes(int(contlen/3))[-1]
-                    pfx = encdata[0:noffset]
+                    noffset = contlen - primes(contlen // 3)[-1]
+                    pfx = encdata[:noffset]
                     encdata = encdata[noffset:]
                     encdata = encdata + pfx
 
@@ -924,7 +934,6 @@ elif isosx:
 
             except Exception:
                 print (traceback.format_exc())
-                pass
         if len(DB)>6:
             # store values used in decryption
             print("Decrypted key file using IDString '{0:s}' and UserName '{1:s}'".format(IDString.decode('utf-8'), GetUserName().decode('utf-8')))
@@ -937,19 +946,19 @@ elif isosx:
 else:
     def getDBfromFile(kInfoFile):
         raise DrmException("This script only runs under Windows or Mac OS X.")
-        return {}
 
 def kindlekeys(files = []):
     keys = []
     if files == []:
         files = getKindleInfoFiles()
     for file in files:
-        key = getDBfromFile(file)
-        if key:
+        if key := getDBfromFile(file):
             # convert all values to hex, just in case.
-            n_key = {}
-            for k,v in key.items():
-                n_key[k.decode()]=codecs.encode(v, 'hex_codec').decode()
+            n_key = {
+                k.decode(): codecs.encode(v, 'hex_codec').decode()
+                for k, v in key.items()
+            }
+
             # key = {k.decode():v.decode() for k,v in key.items()}
             keys.append(n_key)
     return keys

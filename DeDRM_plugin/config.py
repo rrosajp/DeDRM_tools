@@ -42,29 +42,29 @@ def checkForDeACSMkeys():
             return None, None
 
         try:
-            from calibre.ptempfile import TemporaryFile
-       
+                from calibre.ptempfile import TemporaryFile
 
-            acc_uuid = getAccountUUID()
-            if acc_uuid is None: 
-                return None, None
 
-            name = "DeACSM_uuid_" + getAccountUUID()
-
-            # Unfortunately, the DeACSM plugin only has code to export to a file, not to return raw key bytes.
-            # Make a temporary file, have the plugin write to that, then read (& delete) that file.
-
-            with TemporaryFile(suffix='.der') as tmp_key_file:
-                export_result = exportAccountEncryptionKeyDER(tmp_key_file)
-
-                if (export_result is False): 
+                acc_uuid = getAccountUUID()
+                if acc_uuid is None: 
                     return None, None
 
-                # Read key file
-                with open(tmp_key_file,'rb') as keyfile:
-                    new_key_value = keyfile.read()
+                name = f"DeACSM_uuid_{getAccountUUID()}"
 
-            return new_key_value, name
+                # Unfortunately, the DeACSM plugin only has code to export to a file, not to return raw key bytes.
+                # Make a temporary file, have the plugin write to that, then read (& delete) that file.
+
+                with TemporaryFile(suffix='.der') as tmp_key_file:
+                    export_result = exportAccountEncryptionKeyDER(tmp_key_file)
+
+                    if (export_result is False): 
+                        return None, None
+
+                    # Read key file
+                    with open(tmp_key_file,'rb') as keyfile:
+                        new_key_value = keyfile.read()
+
+                return new_key_value, name
         except: 
             traceback.print_exc()
             return None, None
@@ -226,15 +226,16 @@ class ConfigWidget(QWidget):
         d.exec_()
 
     def help_link_activated(self, url):
-        def get_help_file_resource():
-            # Copy the HTML helpfile to the plugin directory each time the
-            # link is clicked in case the helpfile is updated in newer plugins.
-            file_path = os.path.join(config_dir, "plugins", "DeDRM", "help", help_file_name)
-            with open(file_path,'w') as f:
-                f.write(self.load_resource(help_file_name))
-            return file_path
-        url = 'file:///' + get_help_file_resource()
-        open_url(QUrl(url))
+            def get_help_file_resource():
+                # Copy the HTML helpfile to the plugin directory each time the
+                # link is clicked in case the helpfile is updated in newer plugins.
+                file_path = os.path.join(config_dir, "plugins", "DeDRM", "help", help_file_name)
+                with open(file_path,'w') as f:
+                    f.write(self.load_resource(help_file_name))
+                return file_path
+
+            url = f'file:///{get_help_file_resource()}'
+            open_url(QUrl(url))
 
     def save_settings(self):
         self.dedrmprefs.set('bandnkeys', self.tempdedrmprefs['bandnkeys'])
@@ -365,9 +366,7 @@ class ManageKeysDialog(QDialog):
         self.resize(self.sizeHint())
 
     def getwineprefix(self):
-        if self.wineprefix is not None:
-            return str(self.wp_lineedit.text()).strip()
-        return ""
+            return "" if self.wineprefix is None else str(self.wp_lineedit.text()).strip()
 
     def populate_list(self):
         if type(self.plugin_keys) == dict:
@@ -380,70 +379,68 @@ class ManageKeysDialog(QDialog):
         self.listy.setMinimumWidth(self.listy.sizeHintForColumn(0) + 20)
 
     def add_key(self):
-        d = self.create_key(self)
-        d.exec_()
+            d = self.create_key(self)
+            d.exec_()
 
-        if d.result() != d.Accepted:
-            # New key generation cancelled.
-            return
+            if d.result() != d.Accepted:
+                # New key generation cancelled.
+                return
 
-        if hasattr(d, "k_key_list") and d.k_key_list is not None: 
-            # importing multiple keys
-            idx = -1
-            dup_key_count = 0
-            added_key_count = 0
-            
-            while True:
-                idx = idx + 1
-                try: 
-                    new_key_value = d.k_key_list[idx]
-                except:
-                    break
+            if hasattr(d, "k_key_list") and d.k_key_list is not None: 
+                    # importing multiple keys
+                    idx = -1
+                    dup_key_count = 0
+                    added_key_count = 0
 
-                if type(self.plugin_keys) == dict:
-                    if new_key_value in self.plugin_keys.values():
-                        dup_key_count = dup_key_count + 1
-                        continue
-                    self.plugin_keys[d.k_name_list[idx]] = new_key_value
-                    added_key_count = added_key_count + 1
-                else:
-                    if new_key_value in self.plugin_keys:
-                        dup_key_count = dup_key_count + 1
-                        continue
-                    self.plugin_keys.append(new_key_value)
-                    added_key_count = added_key_count + 1
-                
-            if (added_key_count > 0 or dup_key_count > 0):
-                if (added_key_count == 0):
-                    info_dialog(None, "{0} {1}: Adding {2}".format(PLUGIN_NAME, PLUGIN_VERSION,self.key_type_name),
-                        "Skipped adding {0} duplicate / existing keys.".format(dup_key_count), show=True, show_copy_button=False)
-                elif (dup_key_count == 0):
-                    info_dialog(None, "{0} {1}: Adding {2}".format(PLUGIN_NAME, PLUGIN_VERSION,self.key_type_name),
-                        "Added {0} new keys.".format(added_key_count), show=True, show_copy_button=False)
-                else:
-                    info_dialog(None, "{0} {1}: Adding {2}".format(PLUGIN_NAME, PLUGIN_VERSION,self.key_type_name),
-                        "Added {0} new keys, skipped adding {1} existing keys.".format(added_key_count, dup_key_count), show=True, show_copy_button=False)
+                    while True:
+                            idx = idx + 1
+                            try: 
+                                new_key_value = d.k_key_list[idx]
+                            except:
+                                break
 
-        else:
-            # Import single key
-            new_key_value = d.key_value
-            if type(self.plugin_keys) == dict:
-                if new_key_value in self.plugin_keys.values():
-                    old_key_name = [name for name, value in self.plugin_keys.items() if value == new_key_value][0]
-                    info_dialog(None, "{0} {1}: Duplicate {2}".format(PLUGIN_NAME, PLUGIN_VERSION,self.key_type_name),
-                                        "The new {1} is the same as the existing {1} named <strong>{0}</strong> and has not been added.".format(old_key_name,self.key_type_name), show=True)
-                    return
-                self.plugin_keys[d.key_name] = new_key_value
+                            if type(self.plugin_keys) == dict:
+                                    if new_key_value in self.plugin_keys.values():
+                                        dup_key_count = dup_key_count + 1
+                                        continue
+                                    self.plugin_keys[d.k_name_list[idx]] = new_key_value
+                            else:
+                                    if new_key_value in self.plugin_keys:
+                                        dup_key_count = dup_key_count + 1
+                                        continue
+                                    self.plugin_keys.append(new_key_value)
+                            added_key_count = added_key_count + 1
+                    if (added_key_count > 0 or dup_key_count > 0):
+                        if (added_key_count == 0):
+                            info_dialog(None, "{0} {1}: Adding {2}".format(PLUGIN_NAME, PLUGIN_VERSION,self.key_type_name),
+                                "Skipped adding {0} duplicate / existing keys.".format(dup_key_count), show=True, show_copy_button=False)
+                        elif (dup_key_count == 0):
+                            info_dialog(None, "{0} {1}: Adding {2}".format(PLUGIN_NAME, PLUGIN_VERSION,self.key_type_name),
+                                "Added {0} new keys.".format(added_key_count), show=True, show_copy_button=False)
+                        else:
+                            info_dialog(None, "{0} {1}: Adding {2}".format(PLUGIN_NAME, PLUGIN_VERSION,self.key_type_name),
+                                "Added {0} new keys, skipped adding {1} existing keys.".format(added_key_count, dup_key_count), show=True, show_copy_button=False)
+
             else:
-                if new_key_value in self.plugin_keys:
-                    info_dialog(None, "{0} {1}: Duplicate {2}".format(PLUGIN_NAME, PLUGIN_VERSION,self.key_type_name),
-                                        "This {0} is already in the list of {0}s has not been added.".format(self.key_type_name), show=True)
-                    return
+                    # Import single key
+                    new_key_value = d.key_value
+                    if type(self.plugin_keys) == dict:
+                        if new_key_value in self.plugin_keys.values():
+                            old_key_name = [name for name, value in self.plugin_keys.items() if value == new_key_value][0]
+                            info_dialog(None, "{0} {1}: Duplicate {2}".format(PLUGIN_NAME, PLUGIN_VERSION,self.key_type_name),
+                                                "The new {1} is the same as the existing {1} named <strong>{0}</strong> and has not been added.".format(old_key_name,self.key_type_name), show=True)
+                            return
+                        self.plugin_keys[d.key_name] = new_key_value
+                    else:
+                        if new_key_value in self.plugin_keys:
+                            info_dialog(None, "{0} {1}: Duplicate {2}".format(PLUGIN_NAME, PLUGIN_VERSION,self.key_type_name),
+                                                "This {0} is already in the list of {0}s has not been added.".format(self.key_type_name), show=True)
+                            return
 
-                self.plugin_keys.append(d.key_value)
+                        self.plugin_keys.append(d.key_value)
 
-        self.listy.clear()
-        self.populate_list()
+            self.listy.clear()
+            self.populate_list()
 
     def rename_key(self):
         if not self.listy.currentItem():
@@ -482,16 +479,17 @@ class ManageKeysDialog(QDialog):
         self.populate_list()
 
     def help_link_activated(self, url):
-        def get_help_file_resource():
-            # Copy the HTML helpfile to the plugin directory each time the
-            # link is clicked in case the helpfile is updated in newer plugins.
-            help_file_name = "{0}_{1}_Help.htm".format(PLUGIN_NAME, self.key_type_name)
-            file_path = os.path.join(config_dir, "plugins", "DeDRM", "help", help_file_name)
-            with open(file_path,'w') as f:
-                f.write(self.parent.load_resource(help_file_name))
-            return file_path
-        url = 'file:///' + get_help_file_resource()
-        open_url(QUrl(url))
+            def get_help_file_resource():
+                # Copy the HTML helpfile to the plugin directory each time the
+                # link is clicked in case the helpfile is updated in newer plugins.
+                help_file_name = "{0}_{1}_Help.htm".format(PLUGIN_NAME, self.key_type_name)
+                file_path = os.path.join(config_dir, "plugins", "DeDRM", "help", help_file_name)
+                with open(file_path,'w') as f:
+                    f.write(self.parent.load_resource(help_file_name))
+                return file_path
+
+            url = f'file:///{get_help_file_resource()}'
+            open_url(QUrl(url))
 
     def migrate_files(self):
         unique_dlg_name = PLUGIN_NAME + "import {0} keys".format(self.key_type_name).replace(' ', '_') #takes care of automatically remembering last directory
@@ -549,32 +547,38 @@ class ManageKeysDialog(QDialog):
             self.populate_list()
 
     def export_key(self):
-        if not self.listy.currentItem():
-            errmsg = "No keyfile selected to export. Highlight a keyfile first."
-            r = error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION),
-                                    _(errmsg), show=True, show_copy_button=False)
-            return
-        keyname = str(self.listy.currentItem().text())
-        unique_dlg_name = PLUGIN_NAME + "export {0} keys".format(self.key_type_name).replace(' ', '_') #takes care of automatically remembering last directory
-        caption = "Save {0} File as...".format(self.key_type_name)
-        filters = [("{0} Files".format(self.key_type_name), ["{0}".format(self.keyfile_ext)])]
-        defaultname = "{0}.{1}".format(keyname, self.keyfile_ext)
-        filename = choose_save_file(self, unique_dlg_name,  caption, filters, all_files=False, initial_filename=defaultname)
-        if filename:
-            if self.binary_file:
-                with open(filename, 'wb') as fname:
-                    fname.write(codecs.decode(self.plugin_keys[keyname],'hex'))
-            elif self.json_file:
-                with open(filename, 'w') as fname:
-                    fname.write(json.dumps(self.plugin_keys[keyname]))
-            elif self.android_file:
-                with open(filename, 'w') as fname:
-                    for key in self.plugin_keys[keyname]:
-                        fname.write(key)
-                        fname.write('\n')
-            else:
-                with open(filename, 'w') as fname:
-                    fname.write(self.plugin_keys[keyname])
+            if not self.listy.currentItem():
+                errmsg = "No keyfile selected to export. Highlight a keyfile first."
+                r = error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION),
+                                        _(errmsg), show=True, show_copy_button=False)
+                return
+            keyname = str(self.listy.currentItem().text())
+            unique_dlg_name = PLUGIN_NAME + "export {0} keys".format(self.key_type_name).replace(' ', '_') #takes care of automatically remembering last directory
+            caption = "Save {0} File as...".format(self.key_type_name)
+            filters = [("{0} Files".format(self.key_type_name), ["{0}".format(self.keyfile_ext)])]
+            defaultname = "{0}.{1}".format(keyname, self.keyfile_ext)
+            if filename := choose_save_file(
+                self,
+                unique_dlg_name,
+                caption,
+                filters,
+                all_files=False,
+                initial_filename=defaultname,
+            ):
+                    if self.binary_file:
+                        with open(filename, 'wb') as fname:
+                            fname.write(codecs.decode(self.plugin_keys[keyname],'hex'))
+                    elif self.json_file:
+                        with open(filename, 'w') as fname:
+                            fname.write(json.dumps(self.plugin_keys[keyname]))
+                    elif self.android_file:
+                        with open(filename, 'w') as fname:
+                            for key in self.plugin_keys[keyname]:
+                                fname.write(key)
+                                fname.write('\n')
+                    else:
+                        with open(filename, 'w') as fname:
+                            fname.write(self.plugin_keys[keyname])
 
 
 
@@ -864,131 +868,130 @@ class AddBandNKeyDialog(QDialog):
 
     def accept_android_nook(self):
         
-        if len(self.key_name) < 4:
-            errmsg = "Key name must be at <i>least</i> 4 characters long!"
-            return error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
+            if len(self.key_name) < 4:
+                errmsg = "Key name must be at <i>least</i> 4 characters long!"
+                return error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
 
-        path_to_ade_data = self.cc_number
+            path_to_ade_data = self.cc_number
 
-        if (os.path.isfile(os.path.join(path_to_ade_data, ".adobe-digital-editions", "activation.xml"))):
-            path_to_ade_data = os.path.join(path_to_ade_data, ".adobe-digital-editions")
-        elif (os.path.isfile(os.path.join(path_to_ade_data, "activation.xml"))):
-            pass
-        else: 
-            errmsg = "This isn't the correct path, or the data is invalid."
-            return error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
+            if (os.path.isfile(os.path.join(path_to_ade_data, ".adobe-digital-editions", "activation.xml"))):
+                    path_to_ade_data = os.path.join(path_to_ade_data, ".adobe-digital-editions")
+            elif not (os.path.isfile(
+                  os.path.join(path_to_ade_data, "activation.xml"))): 
+                    errmsg = "This isn't the correct path, or the data is invalid."
+                    return error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
 
-        from ignoblekeyAndroid import dump_keys
-        store_result = dump_keys(path_to_ade_data)
+            from ignoblekeyAndroid import dump_keys
+            store_result = dump_keys(path_to_ade_data)
 
-        if len(store_result) == 0:
-            errmsg = "Failed to extract keys. Is this the correct folder?"
-            return error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
+            if len(store_result) == 0:
+                errmsg = "Failed to extract keys. Is this the correct folder?"
+                return error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
 
-        if len(store_result) == 1:
-            # Found exactly one key. Store it with that name.
-            self.result_data = store_result[0]
-            QDialog.accept(self)
-            return
+            if len(store_result) == 1:
+                # Found exactly one key. Store it with that name.
+                self.result_data = store_result[0]
+                QDialog.accept(self)
+                return
 
-        # Found multiple keys
-        keys = []
-        names = []
-        idx = 1
-        for key in store_result: 
-            keys.append(key)
-            names.append(self.key_name + "_" + str(idx))
-            idx = idx + 1
+            # Found multiple keys
+            keys = []
+            names = []
+            idx = 1
+            for key in store_result: 
+                    keys.append(key)
+                    names.append(f"{self.key_name}_{str(idx)}")
+                    idx = idx + 1
 
-        self.k_full_name_list = names
-        self.k_full_key_list = keys
-        QDialog.accept(self)
-        return
-
-
-    def accept_ade_dump_passhash(self):
-        
-        try: 
-            from adobekey_get_passhash import passhash_keys
-            keys, names = passhash_keys()
-        except:
-            errmsg = "Failed to grab PassHash keys from ADE."
-            return error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
-
-        # Take the first new key we found.
-
-        idx = -1
-        new_keys = []
-        new_names = []
-        for key in keys:
-            idx = idx + 1
-            if key in self.parent.plugin_keys.values():
-                continue
-        
-            new_keys.append(key)
-            new_names.append(names[idx])
-
-        if len(new_keys) == 0:
-            # Okay, we didn't find anything. How do we get rid of the window?
-            errmsg = "Didn't find any PassHash keys in ADE."
-            error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
-            QDialog.reject(self)
-            return
-
-        # Add new keys to list.
-        self.k_full_name_list = new_names
-        self.k_full_key_list = new_keys
-        QDialog.accept(self)
-        return
-
-
-
-    def accept_win_nook(self):
-
-        if len(self.key_name) < 4:
-            errmsg = "Key name must be at <i>least</i> 4 characters long!"
-            return error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
-
-        try: 
-            from ignoblekeyWindowsStore import dump_keys
-            store_result = dump_keys(False)
-        except:
-            errmsg = "Failed to import from Nook Microsoft Store app."
-            return error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
-
-        try: 
-            # Try the Nook Study app
-            from ignoblekeyNookStudy import nookkeys
-            study_result = nookkeys()
-        except:
-            errmsg = "Failed to import from Nook Study app."
-            return error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
-
-        # Add all found keys to a list
-        keys = []
-        names = []
-        idx = 1
-        for key in store_result: 
-            keys.append(key)
-            names.append(self.key_name + "_nookStore_" + str(idx))
-            idx = idx + 1
-        idx = 1
-        for key in study_result: 
-            keys.append(key)
-            names.append(self.key_name + "_nookStudy_" + str(idx))
-            idx = idx + 1
-
-        if len(keys) > 0:
             self.k_full_name_list = names
             self.k_full_key_list = keys
             QDialog.accept(self)
             return
 
 
-        # Okay, we didn't find anything. 
-        errmsg = "Didn't find any Nook keys in the Windows app."
-        error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
-        QDialog.reject(self)
+    def accept_ade_dump_passhash(self):
+        
+            try: 
+                from adobekey_get_passhash import passhash_keys
+                keys, names = passhash_keys()
+            except:
+                errmsg = "Failed to grab PassHash keys from ADE."
+                return error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
+
+            # Take the first new key we found.
+
+            idx = -1
+            new_keys = []
+            new_names = []
+            for key in keys:
+                idx = idx + 1
+                if key in self.parent.plugin_keys.values():
+                    continue
+
+                new_keys.append(key)
+                new_names.append(names[idx])
+
+            if not new_keys:
+                    # Okay, we didn't find anything. How do we get rid of the window?
+                    errmsg = "Didn't find any PassHash keys in ADE."
+                    error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
+                    QDialog.reject(self)
+                    return
+
+            # Add new keys to list.
+            self.k_full_name_list = new_names
+            self.k_full_key_list = new_keys
+            QDialog.accept(self)
+            return
+
+
+
+    def accept_win_nook(self):
+
+            if len(self.key_name) < 4:
+                errmsg = "Key name must be at <i>least</i> 4 characters long!"
+                return error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
+
+            try: 
+                from ignoblekeyWindowsStore import dump_keys
+                store_result = dump_keys(False)
+            except:
+                errmsg = "Failed to import from Nook Microsoft Store app."
+                return error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
+
+            try: 
+                # Try the Nook Study app
+                from ignoblekeyNookStudy import nookkeys
+                study_result = nookkeys()
+            except:
+                errmsg = "Failed to import from Nook Study app."
+                return error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
+
+            # Add all found keys to a list
+            keys = []
+            names = []
+            idx = 1
+            for key in store_result: 
+                    keys.append(key)
+                    names.append(f"{self.key_name}_nookStore_{str(idx)}")
+                    idx = idx + 1
+            idx = 1
+            for key in study_result: 
+                    keys.append(key)
+                    names.append(f"{self.key_name}_nookStudy_{str(idx)}")
+                    idx = idx + 1
+
+            if keys:
+                    self.k_full_name_list = names
+                    self.k_full_key_list = keys
+                    QDialog.accept(self)
+                    return
+
+
+            # Okay, we didn't find anything. 
+            errmsg = "Didn't find any Nook keys in the Windows app."
+            error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
+            QDialog.reject(self)
 
 
     def accept_b64_passhash(self):
@@ -1128,72 +1131,67 @@ class AddAdeptDialog():
 
     def __init__(self, parent=None,):
         
-        self.parent = parent
-        self.new_keys = []
-        self.new_names = []
+            self.parent = parent
+            self.new_keys = []
+            self.new_names = []
 
-        try:
-            if iswindows or isosx:
-                from adobekey import adeptkeys
+            try:
+                if iswindows or isosx:
+                    from adobekey import adeptkeys
 
-                defaultkeys, defaultnames = adeptkeys()
-            else:  # linux
-                from wineutils import WineGetKeys
+                    defaultkeys, defaultnames = adeptkeys()
+                else:  # linux
+                    from wineutils import WineGetKeys
 
-                scriptpath = os.path.join(parent.parent.alfdir,"adobekey.py")
-                defaultkeys, defaultnames = WineGetKeys(scriptpath, ".der",parent.getwineprefix())
+                    scriptpath = os.path.join(parent.parent.alfdir,"adobekey.py")
+                    defaultkeys, defaultnames = WineGetKeys(scriptpath, ".der",parent.getwineprefix())
 
-            if sys.version_info[0] < 3:
-                # Python2
-                import itertools
-                zip_function = itertools.izip
-            else:
-                # Python3
-                zip_function = zip
-
-            for key, name in zip_function(defaultkeys, defaultnames):
-                if codecs.encode(key,'hex').decode("latin-1") in self.parent.plugin_keys.values():
-                    print("Found key '{0}' in ADE - already present, skipping.".format(name))
+                if sys.version_info[0] < 3:
+                    # Python2
+                    import itertools
+                    zip_function = itertools.izip
                 else:
-                    self.new_keys.append(key)
-                    self.new_names.append(name)
-        except:
-            print("Exception while checking for ADE keys")
-            traceback.print_exc()
+                    # Python3
+                    zip_function = zip
 
-        
-        # Check for keys in the DeACSM plugin
-        try: 
-            key, name = checkForDeACSMkeys()
+                for key, name in zip_function(defaultkeys, defaultnames):
+                    if codecs.encode(key,'hex').decode("latin-1") in self.parent.plugin_keys.values():
+                        print("Found key '{0}' in ADE - already present, skipping.".format(name))
+                    else:
+                        self.new_keys.append(key)
+                        self.new_names.append(name)
+            except:
+                print("Exception while checking for ADE keys")
+                traceback.print_exc()
 
-            if key is not None: 
 
-                if codecs.encode(key,'hex').decode("latin-1") in self.parent.plugin_keys.values():
-                    print("Found key '{0}' in DeACSM - already present, skipping.".format(name))
-                else: 
-                    # Found new key, add that.
-                    self.new_keys.append(key)
-                    self.new_names.append(name)
-        except: 
-            print("Exception while checking for DeACSM keys")
-            traceback.print_exc()
+            # Check for keys in the DeACSM plugin
+            try: 
+                key, name = checkForDeACSMkeys()
 
-        # Just in case ADE and DeACSM are activated with the same account, 
-        # check the new_keys list for duplicates and remove them, if they exist.
+                if key is not None: 
 
-        new_keys_2 = []
-        new_names_2 = []
-        i = 0
-        while True: 
-            if i >= len(self.new_keys):
-                break
-            if not self.new_keys[i] in new_keys_2:
-                new_keys_2.append(self.new_keys[i])
-                new_names_2.append(self.new_names[i])
-            i = i + 1
-        
-        self.k_full_key_list = new_keys_2
-        self.k_full_name_list = new_names_2
+                    if codecs.encode(key,'hex').decode("latin-1") in self.parent.plugin_keys.values():
+                        print("Found key '{0}' in DeACSM - already present, skipping.".format(name))
+                    else: 
+                        # Found new key, add that.
+                        self.new_keys.append(key)
+                        self.new_names.append(name)
+            except: 
+                print("Exception while checking for DeACSM keys")
+                traceback.print_exc()
+
+            # Just in case ADE and DeACSM are activated with the same account, 
+            # check the new_keys list for duplicates and remove them, if they exist.
+
+            new_keys_2 = []
+            new_names_2 = []
+            for i in range(len(self.new_keys)):
+                    if self.new_keys[i] not in new_keys_2:
+                            new_keys_2.append(self.new_keys[i])
+                            new_names_2.append(self.new_names[i])
+            self.k_full_key_list = new_keys_2
+            self.k_full_name_list = new_names_2
 
 
     @property
@@ -1222,56 +1220,56 @@ class AddAdeptDialog():
 
 class AddKindleDialog(QDialog):
     def __init__(self, parent=None,):
-        QDialog.__init__(self, parent)
-        self.parent = parent
-        self.setWindowTitle("{0} {1}: Getting Default Kindle for Mac/PC Key".format(PLUGIN_NAME, PLUGIN_VERSION))
-        layout = QVBoxLayout(self)
-        self.setLayout(layout)
+            QDialog.__init__(self, parent)
+            self.parent = parent
+            self.setWindowTitle("{0} {1}: Getting Default Kindle for Mac/PC Key".format(PLUGIN_NAME, PLUGIN_VERSION))
+            layout = QVBoxLayout(self)
+            self.setLayout(layout)
 
-        try:
-            if iswindows or isosx:
-                from kindlekey import kindlekeys
+            try:
+                if iswindows or isosx:
+                    from kindlekey import kindlekeys
 
-                defaultkeys = kindlekeys()
-            else: # linux
-                from wineutils import WineGetKeys
+                    defaultkeys = kindlekeys()
+                else: # linux
+                    from wineutils import WineGetKeys
 
-                scriptpath = os.path.join(parent.parent.alfdir,"kindlekey.py")
-                defaultkeys, defaultnames = WineGetKeys(scriptpath, ".k4i",parent.getwineprefix())
+                    scriptpath = os.path.join(parent.parent.alfdir,"kindlekey.py")
+                    defaultkeys, defaultnames = WineGetKeys(scriptpath, ".k4i",parent.getwineprefix())
 
-            self.default_key = defaultkeys[0]
-        except:
-            traceback.print_exc()
-            self.default_key = ""
+                self.default_key = defaultkeys[0]
+            except:
+                traceback.print_exc()
+                self.default_key = ""
 
-        self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+            self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
 
-        if len(self.default_key)>0:
-            data_group_box = QGroupBox("", self)
-            layout.addWidget(data_group_box)
-            data_group_box_layout = QVBoxLayout()
-            data_group_box.setLayout(data_group_box_layout)
+            if not self.default_key:
+                    default_key_error = QLabel("The default encryption key for Kindle for Mac/PC could not be found.", self)
+                    default_key_error.setAlignment(Qt.AlignHCenter)
+                    layout.addWidget(default_key_error)
 
-            key_group = QHBoxLayout()
-            data_group_box_layout.addLayout(key_group)
-            key_group.addWidget(QLabel("Unique Key Name:", self))
-            self.key_ledit = QLineEdit("default_key_" + str(int(time.time())), self)
-            self.key_ledit.setToolTip("<p>Enter an identifying name for the current default Kindle for Mac/PC key.")
-            key_group.addWidget(self.key_ledit)
+                    # if no default, both buttons do the same
+                    self.button_box.accepted.connect(self.reject)
 
-            self.button_box.accepted.connect(self.accept)
-        else:
-            default_key_error = QLabel("The default encryption key for Kindle for Mac/PC could not be found.", self)
-            default_key_error.setAlignment(Qt.AlignHCenter)
-            layout.addWidget(default_key_error)
+            else:
+                    data_group_box = QGroupBox("", self)
+                    layout.addWidget(data_group_box)
+                    data_group_box_layout = QVBoxLayout()
+                    data_group_box.setLayout(data_group_box_layout)
 
-            # if no default, both buttons do the same
-            self.button_box.accepted.connect(self.reject)
+                    key_group = QHBoxLayout()
+                    data_group_box_layout.addLayout(key_group)
+                    key_group.addWidget(QLabel("Unique Key Name:", self))
+                    self.key_ledit = QLineEdit(f"default_key_{int(time.time())}", self)
+                    self.key_ledit.setToolTip("<p>Enter an identifying name for the current default Kindle for Mac/PC key.")
+                    key_group.addWidget(self.key_ledit)
 
-        self.button_box.rejected.connect(self.reject)
-        layout.addWidget(self.button_box)
+                    self.button_box.accepted.connect(self.accept)
+            self.button_box.rejected.connect(self.reject)
+            layout.addWidget(self.button_box)
 
-        self.resize(self.sizeHint())
+            self.resize(self.sizeHint())
 
     @property
     def key_name(self):
@@ -1390,22 +1388,22 @@ class AddAndroidDialog(QDialog):
         return self.serials_from_file
 
     def get_android_file(self):
-        unique_dlg_name = PLUGIN_NAME + "Import Kindle for Android backup file" #takes care of automatically remembering last directory
-        caption = "Select Kindle for Android backup file to add"
-        filters = [("Kindle for Android backup files", ['db','ab','xml'])]
-        files = choose_files(self, unique_dlg_name, caption, filters, all_files=False)
-        self.serials_from_file = []
-        file_name = ""
-        if files:
-            # find the first selected file that yields some serial numbers
-            for filename in files:
-                fpath = os.path.join(config_dir, filename)
-                self.filename = os.path.basename(filename)
-                file_serials = androidkindlekey.get_serials(fpath)
-                if len(file_serials)>0:
-                    file_name = os.path.basename(self.filename)
-                    self.serials_from_file.extend(file_serials)
-        self.selected_file_name.setText(file_name)
+            unique_dlg_name = f"{PLUGIN_NAME}Import Kindle for Android backup file"
+            caption = "Select Kindle for Android backup file to add"
+            filters = [("Kindle for Android backup files", ['db','ab','xml'])]
+            files = choose_files(self, unique_dlg_name, caption, filters, all_files=False)
+            self.serials_from_file = []
+            file_name = ""
+            if files:
+                # find the first selected file that yields some serial numbers
+                for filename in files:
+                    fpath = os.path.join(config_dir, filename)
+                    self.filename = os.path.basename(filename)
+                    file_serials = androidkindlekey.get_serials(fpath)
+                    if len(file_serials)>0:
+                        file_name = os.path.basename(self.filename)
+                        self.serials_from_file.extend(file_serials)
+            self.selected_file_name.setText(file_name)
 
 
     def accept(self):
@@ -1456,13 +1454,13 @@ class AddPIDDialog(QDialog):
         return str(self.key_ledit.text()).strip()
 
     def accept(self):
-        if len(self.key_name) == 0 or self.key_name.isspace():
-            errmsg = "Please enter a Mobipocket PID or click Cancel in the dialog."
-            return error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
-        if len(self.key_name) != 8 and len(self.key_name) != 10:
-            errmsg = "Mobipocket PIDs must be 8 or 10 characters long. This is {0:d} characters long.".format(len(self.key_name))
-            return error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
-        QDialog.accept(self)
+            if len(self.key_name) == 0 or self.key_name.isspace():
+                errmsg = "Please enter a Mobipocket PID or click Cancel in the dialog."
+                return error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
+            if len(self.key_name) not in [8, 10]:
+                    errmsg = "Mobipocket PIDs must be 8 or 10 characters long. This is {0:d} characters long.".format(len(self.key_name))
+                    return error_dialog(None, "{0} {1}".format(PLUGIN_NAME, PLUGIN_VERSION), errmsg, show=True, show_copy_button=False)
+            QDialog.accept(self)
 
 
 class AddLCPKeyDialog(QDialog):

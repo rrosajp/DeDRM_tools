@@ -156,10 +156,7 @@ class SymbolTable(object):
         if sid < 1:
             raise ValueError("Invalid symbol id")
 
-        if sid < len(self.table):
-            return self.table[sid]
-        else:
-            return ""
+        return self.table[sid] if sid < len(self.table) else ""
 
     def import_(self, table, maxid):
         for i in range(maxid):
@@ -278,16 +275,18 @@ class BinaryIonParser(object):
         self.containerstack.append(ContainerRec(nextpos=nextposition, tid=typeid, remaining=nextremaining))
 
     def stepin(self):
-        _assert(self.valuetid in [TID_STRUCT, TID_LIST, TID_SEXP] and not self.eof,
-                "valuetid=%s eof=%s" % (self.valuetid, self.eof))
+        _assert(
+            self.valuetid in [TID_STRUCT, TID_LIST, TID_SEXP] and not self.eof,
+            f"valuetid={self.valuetid} eof={self.eof}",
+        )
+
         _assert((not self.valueisnull or self.state == ParserState.AfterValue) and
                (self.valueisnull or self.state == ParserState.BeforeValue))
 
         nextrem = self.localremaining
         if nextrem != -1:
             nextrem -= self.valuelen
-            if nextrem < 0:
-                nextrem = 0
+            nextrem = max(nextrem, 0)
         self.push(self.parenttid, self.stream.tell() + self.valuelen, nextrem)
 
         self.isinstruct = (self.valuetid == TID_STRUCT)
@@ -388,9 +387,7 @@ class BinaryIonParser(object):
 
         _assert(i < 4 or (b & 0x80) != 0, "int overflow")
 
-        if negative:
-            return -result
-        return result
+        return -result if negative else result
 
     def readvaruint(self):
         b = ord(self.read())
@@ -423,13 +420,9 @@ class BinaryIonParser(object):
             b[0] = b[0] & 0x7F
             signed = True
 
-        # Convert variably sized network order integer into 64-bit little endian
-        j = 0
         vb = [0] * 8
-        for i in range(len(b), -1, -1):
+        for j, i in enumerate(range(len(b), -1, -1)):
             vb[i] = b[j]
-            j += 1
-
         v = struct.unpack("<Q", b"".join(bchr(x) for x in vb))[0]
 
         result = v * (10 ** exponent)
@@ -503,21 +496,23 @@ class BinaryIonParser(object):
 
         self.stepout()
 
-        if name == "" or name == SystemSymbols.ION:
+        if name in ["", SystemSymbols.ION]:
             return
 
-        if version < 1:
-            version = 1
-
+        version = max(version, 1)
         table = self.findcatalogitem(name)
         if maxid < 0:
-            _assert(table is not None and version == table.version, "Import %s lacks maxid" % name)
+            _assert(
+                table is not None and version == table.version,
+                f"Import {name} lacks maxid",
+            )
+
             maxid = len(table.symnames)
 
         if table is not None:
             self.symbols.import_(table, min(maxid, len(table.symnames)))
             if len(table.symnames) < maxid:
-                self.symbols.importunknown(name + "-unknown", maxid - len(table.symnames))
+                self.symbols.importunknown(f"{name}-unknown", maxid - len(table.symnames))
         else:
             self.symbols.importunknown(name, maxid)
 
@@ -546,7 +541,11 @@ class BinaryIonParser(object):
         return result
 
     def lobvalue(self):
-        _assert(self.valuetid in [TID_CLOB, TID_BLOB], "Not a LOB type: %s" % self.getfieldname())
+        _assert(
+            self.valuetid in [TID_CLOB, TID_BLOB],
+            f"Not a LOB type: {self.getfieldname()}",
+        )
+
 
         if self.valueisnull:
             return None
@@ -587,11 +586,7 @@ class BinaryIonParser(object):
                 for i in range(self.valuelen - 1, -1, -1):
                     v = (v | (ord(self.read()) << (i * 8)))
 
-                if self.valuetid == TID_NEGINT:
-                    self.value = -v
-                else:
-                    self.value = v
-
+                self.value = -v if self.valuetid == TID_NEGINT else v
         elif self.valuetid == TID_DECIMAL:
             self.value = self.readdecimal()
 
@@ -653,21 +648,14 @@ class BinaryIonParser(object):
         if b is None:
             return "null"
 
-        result = ""
-        for i in b:
-            result += ("%02x " % ord(i))
-
-        if len(result) > 0:
+        result = "".join(("%02x " % ord(i)) for i in b)
+        if result != "":
             result = result[:-1]
         return result
 
     def ionwalk(self, supert, indent, lst):
         while self.hasnext():
-            if supert == TID_STRUCT:
-                L = self.getfieldname() + ":"
-            else:
-                L = ""
-
+            L = f"{self.getfieldname()}:" if supert == TID_STRUCT else ""
             t = self.next()
             if t in [TID_STRUCT, TID_LIST]:
                 if L != "":
@@ -678,16 +666,16 @@ class BinaryIonParser(object):
                 if t == TID_STRUCT:
                     lst.append(indent + "{")
                 else:
-                    lst.append(indent + "[")
+                    lst.append(f"{indent}[")
 
                 self.stepin()
-                self.ionwalk(t, indent + "  ", lst)
+                self.ionwalk(t, f"{indent}  ", lst)
                 self.stepout()
 
                 if t == TID_STRUCT:
                     lst.append(indent + "}")
                 else:
-                    lst.append(indent + "]")
+                    lst.append(f"{indent}]")
 
             else:
                 if t == TID_STRING:
@@ -828,7 +816,7 @@ def obfuscate(secret, version):
     wordhash = bytearray(hashlib.sha256(word).digest())
 
     # shuffle secret and xor it with the first half of the word hash
-    for i in range(0, len(secret)):
+    for i in range(len(secret)):
         index = i // (len(secret) // magic) + magic * (i % (len(secret) // magic))
         obfuscated[index] = secret[i] ^ wordhash[index % 16]
 
@@ -867,7 +855,10 @@ class DrmIonVoucher(object):
         addprottable(self.envelope)
 
     def decryptvoucher(self):
-        shared = ("PIDv3" + self.encalgorithm + self.enctransformation + self.hashalgorithm).encode('ASCII')
+        shared = f"PIDv3{self.encalgorithm}{self.enctransformation}{self.hashalgorithm}".encode(
+            'ASCII'
+        )
+
 
         self.lockparams.sort()
         for param in self.lockparams:
@@ -876,7 +867,7 @@ class DrmIonVoucher(object):
             elif param == "CLIENT_ID":
                 shared += param.encode('ASCII') + self.dsn
             else:
-                _assert(False, "Unknown lock parameter: %s" % param)
+                _assert(False, f"Unknown lock parameter: {param}")
 
         sharedsecret = obfuscate(shared, self.version)
 
@@ -888,8 +879,13 @@ class DrmIonVoucher(object):
         self.drmkey = BinaryIonParser(BytesIO(b))
         addprottable(self.drmkey)
 
-        _assert(self.drmkey.hasnext() and self.drmkey.next() == TID_LIST and self.drmkey.gettypename() == "com.amazon.drm.KeySet@1.0",
-                "Expected KeySet, got %s" % self.drmkey.gettypename())
+        _assert(
+            self.drmkey.hasnext()
+            and self.drmkey.next() == TID_LIST
+            and self.drmkey.gettypename() == "com.amazon.drm.KeySet@1.0",
+            f"Expected KeySet, got {self.drmkey.gettypename()}",
+        )
+
 
         self.drmkey.stepin()
         while self.drmkey.hasnext():
@@ -901,9 +897,17 @@ class DrmIonVoucher(object):
             while self.drmkey.hasnext():
                 self.drmkey.next()
                 if self.drmkey.getfieldname() == "algorithm":
-                    _assert(self.drmkey.stringvalue() == "AES", "Unknown cipher algorithm: %s" % self.drmkey.stringvalue())
+                    _assert(
+                        self.drmkey.stringvalue() == "AES",
+                        f"Unknown cipher algorithm: {self.drmkey.stringvalue()}",
+                    )
+
                 elif self.drmkey.getfieldname() == "format":
-                    _assert(self.drmkey.stringvalue() == "RAW", "Unknown key format: %s" % self.drmkey.stringvalue())
+                    _assert(
+                        self.drmkey.stringvalue() == "RAW",
+                        f"Unknown key format: {self.drmkey.stringvalue()}",
+                    )
+
                 elif self.drmkey.getfieldname() == "encoded":
                     self.secretkey = self.drmkey.lobvalue()
 
@@ -930,7 +934,11 @@ class DrmIonVoucher(object):
             elif field != "strategy":
                 continue
 
-            _assert(self.envelope.gettypename() == "com.amazon.drm.PIDv3@1.0", "Unknown strategy: %s" % self.envelope.gettypename())
+            _assert(
+                self.envelope.gettypename() == "com.amazon.drm.PIDv3@1.0",
+                f"Unknown strategy: {self.envelope.gettypename()}",
+            )
+
 
             self.envelope.stepin()
             while self.envelope.hasnext():
@@ -967,8 +975,11 @@ class DrmIonVoucher(object):
             elif self.voucher.getfieldname() == "cipher_text":
                 self.ciphertext = self.voucher.lobvalue()
             elif self.voucher.getfieldname() == "license":
-                _assert(self.voucher.gettypename() == "com.amazon.drm.License@1.0",
-                        "Unknown license: %s" % self.voucher.gettypename())
+                _assert(
+                    self.voucher.gettypename() == "com.amazon.drm.License@1.0",
+                    f"Unknown license: {self.voucher.gettypename()}",
+                )
+
                 self.voucher.stepin()
                 while self.voucher.hasnext():
                     self.voucher.next()
@@ -1014,13 +1025,15 @@ class DrmIon(object):
 
         _assert(self.ion.hasnext(), "DRMION envelope is empty")
         _assert(self.ion.next() == TID_SYMBOL and self.ion.gettypename() == "doctype", "Expected doctype symbol")
-        _assert(self.ion.next() == TID_LIST and self.ion.gettypename() in ["com.amazon.drm.Envelope@1.0", "com.amazon.drm.Envelope@2.0"],
-                "Unknown type encountered in DRMION envelope, expected Envelope, got %s" % self.ion.gettypename())
+        _assert(
+            self.ion.next() == TID_LIST
+            and self.ion.gettypename()
+            in ["com.amazon.drm.Envelope@1.0", "com.amazon.drm.Envelope@2.0"],
+            f"Unknown type encountered in DRMION envelope, expected Envelope, got {self.ion.gettypename()}",
+        )
 
-        while True:
-            if self.ion.gettypename() == "enddoc":
-                break
 
+        while self.ion.gettypename() != "enddoc":
             self.ion.stepin()
             while self.ion.hasnext():
                 self.ion.next()

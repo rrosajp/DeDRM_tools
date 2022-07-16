@@ -49,14 +49,11 @@ class DocParser(object):
 
 
     # find tag if within pos to end inclusive
-    def findinDoc(self, tagpath, pos, end) :
+    def findinDoc(self, tagpath, pos, end):
         result = None
         docList = self.flatdoc
         cnt = len(docList)
-        if end == -1 :
-            end = cnt
-        else:
-            end = min(cnt,end)
+        end = cnt if end == -1 else min(cnt,end)
         foundat = -1
         for j in range(pos, end):
             item = docList[j]
@@ -105,8 +102,11 @@ class DocParser(object):
     def process(self):
 
         classlst = ''
-        csspage = '.cl-center { text-align: center; margin-left: auto; margin-right: auto; }\n'
-        csspage += '.cl-right { text-align: right; }\n'
+        csspage = (
+            '.cl-center { text-align: center; margin-left: auto; margin-right: auto; }\n'
+            + '.cl-right { text-align: right; }\n'
+        )
+
         csspage += '.cl-left { text-align: left; }\n'
         csspage += '.cl-justify { text-align: justify; }\n'
 
@@ -124,35 +124,35 @@ class DocParser(object):
             end = styleList[j+1]
 
             (pos, tag) = self.findinDoc(b'style._tag',start,end)
-            if tag == None :
+            if tag is None:
                 (pos, tag) = self.findinDoc(b'style.type',start,end)
 
             # Is this something we know how to convert to css
-            if tag in self.stags :
+            if tag in self.stags:
 
                 # get the style class
                 (pos, sclass) = self.findinDoc(b'style.class',start,end)
-                if sclass != None:
-                    sclass = sclass.replace(b' ',b'-')
-                    sclass = b'.cl-' + sclass.lower()
-                else :
+                if sclass is None:
                     sclass = b''
 
+                else:
+                    sclass = sclass.replace(b' ',b'-')
+                    sclass = b'.cl-' + sclass.lower()
                 if debug: print('sclass', sclass)
 
                 # check for any "after class" specifiers
                 (pos, aftclass) = self.findinDoc(b'style._after_class',start,end)
-                if aftclass != None:
-                    aftclass = aftclass.replace(b' ',b'-')
-                    aftclass = b'.cl-' + aftclass.lower()
-                else :
+                if aftclass is None:
                     aftclass = b''
 
+                else:
+                    aftclass = aftclass.replace(b' ',b'-')
+                    aftclass = b'.cl-' + aftclass.lower()
                 if debug: print('aftclass', aftclass)
 
                 cssargs = {}
 
-                while True :
+                while True:
 
                     (pos1, attr) = self.findinDoc(b'style.rule.attr', start, end)
                     (pos2, val) = self.findinDoc(b'style.rule.value', start, end)
@@ -160,54 +160,52 @@ class DocParser(object):
                     if debug: print('attr', attr)
                     if debug: print('val', val)
 
-                    if attr == None : break
+                    if attr is None: break
 
-                    if (attr == b'display') or (attr == b'pos') or (attr == b'align'):
+                    if attr in [b'display', b'pos', b'align']:
                         # handle text based attributess
                         attr = attr + b'-' + val
                         if attr in self.attr_str_map :
                             cssargs[attr] = (self.attr_str_map[attr], b'')
-                    else :
-                        # handle value based attributes
-                        if attr in self.attr_val_map :
-                            name = self.attr_val_map[attr]
-                            if attr in (b'margin-bottom', b'margin-top', b'space-after') :
-                                scale = self.ph
-                            elif attr in (b'margin-right', b'indent', b'margin-left', b'hang') :
-                                scale = self.pw
-                            elif attr == b'line-space':
-                                scale = self.fontsize * 2.0
-                            else:
-                                print("Scale not defined!")
-                                scale = 1.0
+                    elif attr in self.attr_val_map:
+                        name = self.attr_val_map[attr]
+                        if attr in (b'margin-bottom', b'margin-top', b'space-after') :
+                            scale = self.ph
+                        elif attr in (b'margin-right', b'indent', b'margin-left', b'hang') :
+                            scale = self.pw
+                        elif attr == b'line-space':
+                            scale = self.fontsize * 2.0
+                        else:
+                            print("Scale not defined!")
+                            scale = 1.0
 
-                            if val == "":
+                        if val == "":
+                            val = 0
+
+                        if attr != b'hang' or int(val) != 0:
+                            try:
+                                f = float(val)
+                            except:
+                                print("Warning: unrecognised val, ignoring")
                                 val = 0
-
-                            if not ((attr == b'hang') and (int(val) == 0)):
-                                try:
-                                    f = float(val)
-                                except:
-                                    print("Warning: unrecognised val, ignoring")
-                                    val = 0
-                                pv = float(val)/scale
-                                cssargs[attr] = (self.attr_val_map[attr], pv)
-                                keep = True
+                            pv = float(val)/scale
+                            cssargs[attr] = (self.attr_val_map[attr], pv)
+                            keep = True
 
                     start = max(pos1, pos2) + 1
 
                 # disable all of the after class tags until I figure out how to handle them
                 if aftclass != "" : keep = False
 
-                if keep :
+                if keep:
                     if debug: print('keeping style')
                     # make sure line-space does not go below 100% or above 300% since
                     # it can be wacky in some styles
                     if b'line-space' in cssargs:
                         seg = cssargs[b'line-space'][0]
                         val = cssargs[b'line-space'][1]
-                        if val < 1.0: val = 1.0
-                        if val > 3.0: val = 3.0
+                        val = max(val, 1.0)
+                        val = min(val, 3.0)
                         del cssargs[b'line-space']
                         cssargs[b'line-space'] = (self.attr_val_map[b'line-space'], val)
 
@@ -224,7 +222,7 @@ class DocParser(object):
                         if b'margin-left' in cssargs:
                             mseg = cssargs[b'margin-left'][0]
                             mval = cssargs[b'margin-left'][1]
-                            if mval < 0: mval = 0
+                            mval = max(mval, 0)
                             mval = hval + mval
                         cssargs[b'margin-left'] = (mseg, mval)
                         if b'indent' in cssargs:
@@ -235,32 +233,29 @@ class DocParser(object):
                         mseg = cssargs[key][0]
                         mval = cssargs[key][1]
                         if mval == '':
-                            cssline += mseg + ' '
-                        else :
+                            cssline += f'{mseg} '
+                        else:
                             aseg = mseg + '%.1f%%;' % (mval * 100.0)
-                            cssline += aseg + ' '
+                            cssline += f'{aseg} '
 
                     cssline += '}'
 
-                    if sclass != '' :
+                    if sclass != '':
                         classlst += sclass + '\n'
 
-                    # handle special case of paragraph class used inside chapter heading
-                    # and non-chapter headings
-                    if sclass != '' :
                         ctype = sclass[4:7]
-                        if ctype == 'ch1' :
-                            csspage += 'h1' + cssline + '\n'
-                        if ctype == 'ch2' :
-                            csspage += 'h2' + cssline + '\n'
-                        if ctype == 'ch3' :
-                            csspage += 'h3' + cssline + '\n'
-                        if ctype == 'h1-' :
-                            csspage += 'h4' + cssline + '\n'
-                        if ctype == 'h2-' :
-                            csspage += 'h5' + cssline + '\n'
-                        if ctype == 'h3_' :
-                            csspage += 'h6' + cssline + '\n'
+                        if ctype == 'ch1':
+                            csspage += f'h1{cssline}' + '\n'
+                        elif ctype == 'ch2':
+                            csspage += f'h2{cssline}' + '\n'
+                        elif ctype == 'ch3':
+                            csspage += f'h3{cssline}' + '\n'
+                        elif ctype == 'h1-':
+                            csspage += f'h4{cssline}' + '\n'
+                        elif ctype == 'h2-':
+                            csspage += f'h5{cssline}' + '\n'
+                        elif ctype == 'h3_':
+                            csspage += f'h6{cssline}' + '\n'
 
                     if cssline != ' { }':
                         csspage += self.stags[tag] + cssline + '\n'
@@ -286,5 +281,4 @@ def convert2CSS(flatxml, fontsize, ph, pw):
 
 def getpageIDMap(flatxml):
     dp = DocParser(flatxml, 0, 0, 0)
-    pageidnumbers = dp.getData('info.original.pid', 0, -1, True)
-    return pageidnumbers
+    return dp.getData('info.original.pid', 0, -1, True)

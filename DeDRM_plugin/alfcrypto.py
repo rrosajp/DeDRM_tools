@@ -24,16 +24,9 @@ def _load_libalfcrypto():
     if sys.platform.startswith('darwin'):
         name_of_lib = 'libalfcrypto.dylib'
     elif sys.platform.startswith('win'):
-        if pointer_size == 4:
-            name_of_lib = 'alfcrypto.dll'
-        else:
-            name_of_lib = 'alfcrypto64.dll'
+        name_of_lib = 'alfcrypto.dll' if pointer_size == 4 else 'alfcrypto64.dll'
     else:
-        if pointer_size == 4:
-            name_of_lib = 'libalfcrypto32.so'
-        else:
-            name_of_lib = 'libalfcrypto64.so'
-
+        name_of_lib = 'libalfcrypto32.so' if pointer_size == 4 else 'libalfcrypto64.so'
     # hard code to local location for libalfcrypto
     libalfcrypto = os.path.join(sys.path[0],name_of_lib)
     if not os.path.isfile(libalfcrypto):
@@ -41,7 +34,7 @@ def _load_libalfcrypto():
     if not os.path.isfile(libalfcrypto):
         libalfcrypto = os.path.join('.',name_of_lib)
     if not os.path.isfile(libalfcrypto):
-        raise Exception('libalfcrypto not found at %s' % libalfcrypto)
+        raise Exception(f'libalfcrypto not found at {libalfcrypto}')
 
     libalfcrypto = CDLL(libalfcrypto)
 
@@ -88,20 +81,14 @@ def _load_libalfcrypto():
 
     PC1 = F(c_char_p, 'PC1', [c_char_p, c_ulong, c_char_p, c_char_p, c_ulong, c_ulong])
 
-    # Topaz Encryption
-    # typedef struct _TpzCtx {
-    #    unsigned int v[2];
-    # } TpzCtx;
-    #
-    # void topazCryptoInit(TpzCtx *ctx, const unsigned char *key, int klen);
-    # void topazCryptoDecrypt(const TpzCtx *ctx, const unsigned char *in, unsigned char *out, int len);
-
     class TPZ_CTX(Structure):
         _fields_ = [('v', c_long * 2)]
 
     TPZ_CTX_p = POINTER(TPZ_CTX)
     topazCryptoInit = F(None, 'topazCryptoInit', [TPZ_CTX_p, c_char_p, c_ulong])
     topazCryptoDecrypt = F(None, 'topazCryptoDecrypt', [TPZ_CTX_p, c_char_p, c_char_p, c_ulong])
+
+
 
 
     class AES_CBC(object):
@@ -112,9 +99,8 @@ def _load_libalfcrypto():
 
         def set_decrypt_key(self, userkey, iv):
             self._blocksize = len(userkey)
-            if (self._blocksize != 16) and (self._blocksize != 24) and (self._blocksize != 32) :
+            if self._blocksize not in [16, 24, 32]:
                 raise Exception('AES CBC improper key used')
-                return
             keyctx = self._keyctx = AES_KEY()
             self._iv = iv
             rv = AES_set_decrypt_key(userkey, len(userkey) * 8, keyctx)
@@ -129,6 +115,7 @@ def _load_libalfcrypto():
                 raise Exception('AES CBC decryption failed')
             return out.raw
 
+
     class Pukall_Cipher(object):
         def __init__(self):
             self.key = None
@@ -142,6 +129,8 @@ def _load_libalfcrypto():
             rv = PC1(key, len(key), src, out, len(src), de)
             return out.raw
 
+
+
     class Topaz_Cipher(object):
         def __init__(self):
             self._ctx = None
@@ -152,11 +141,12 @@ def _load_libalfcrypto():
             return tpz_ctx
 
         def decrypt(self, data,  ctx=None):
-            if ctx == None:
+            if ctx is None:
                 ctx = self._ctx
             out = create_string_buffer(len(data))
             topazCryptoDecrypt(ctx, data, out, len(data))
             return out.raw
+
 
     print("Using Library AlfCrypto DLL/DYLIB/SO")
     return (AES_CBC, Pukall_Cipher, Topaz_Cipher)
@@ -165,6 +155,8 @@ def _load_libalfcrypto():
 def _load_python_alfcrypto():
 
     import aescbc
+
+
 
     class Pukall_Cipher(object):
         def __init__(self):
@@ -176,9 +168,7 @@ def _load_python_alfcrypto():
             keyXorVal = 0;
             if len(key)!=16:
                 raise Exception('Pukall_Cipher: Bad key length.')
-            wkey = []
-            for i in range(8):
-                wkey.append(ord(key[i*2])<<8 | ord(key[i*2+1]))
+            wkey = [ord(key[i*2])<<8 | ord(key[i*2+1]) for i in range(8)]
             dst = ""
             for i in range(len(src)):
                 temp1 = 0;
@@ -201,6 +191,9 @@ def _load_python_alfcrypto():
                 dst+=chr(curByte)
             return dst
 
+
+
+
     class Topaz_Cipher(object):
         def __init__(self):
             self._ctx = None
@@ -216,7 +209,7 @@ def _load_python_alfcrypto():
             return [ctx1,ctx2]
 
         def decrypt(self, data,  ctx=None):
-            if ctx == None:
+            if ctx is None:
                 ctx = self._ctx
             ctx1 = ctx[0]
             ctx2 = ctx[1]
@@ -229,6 +222,9 @@ def _load_python_alfcrypto():
                 ctx1 = (((ctx1 >> 2) * (ctx1 >> 7)) &0xFFFFFFFF) ^((m * m * 0x0F902007) &0xFFFFFFFF)
                 plainText += chr(m)
             return plainText
+
+
+
 
     class AES_CBC(object):
         def __init__(self):
@@ -243,8 +239,8 @@ def _load_python_alfcrypto():
 
         def decrypt(self, data):
             iv = self._iv
-            cleartext = self.aes.decrypt(iv + data)
-            return cleartext
+            return self.aes.decrypt(iv + data)
+
 
     print("Using Library AlfCrypto Python")
     return (AES_CBC, Pukall_Cipher, Topaz_Cipher)
@@ -257,7 +253,7 @@ def _load_crypto():
         try:
             AES_CBC, Pukall_Cipher, Topaz_Cipher = loader()
             break
-        except (ImportError, Exception):
+        except Exception:
             pass
     return AES_CBC, Pukall_Cipher, Topaz_Cipher
 
@@ -273,7 +269,7 @@ class KeyIVGen(object):
         def xorbytes( a, b ):
             if len(a) != len(b):
                 raise Exception("xorbytes(): lengths differ")
-            return bytes([x ^ y for x, y in zip(a, b)])
+            return bytes(x ^ y for x, y in zip(a, b))
 
         def prf( h, data ):
             hm = h.copy()
@@ -298,6 +294,6 @@ class KeyIVGen(object):
         T = b""
         for i in range(1, l+1):
             T += pbkdf2_F( h, salt, iter, i )
-        return T[0: keylen]
+        return T[:keylen]
 
 

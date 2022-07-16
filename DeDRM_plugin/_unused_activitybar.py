@@ -15,8 +15,7 @@ class ActivityBar(tkinter.Frame):
         self._startx = 0
         self._barwidth = barwidth
         self._bardiv = length / barwidth
-        if self._bardiv < 10:
-            self._bardiv = 10
+        self._bardiv = max(self._bardiv, 10)
         stopx = self._startx + self._barwidth
         if stopx > self._maximum:
             stopx = self._maximum
@@ -40,8 +39,7 @@ class ActivityBar(tkinter.Frame):
         self._maximum = self._canv.winfo_width()
         self._startx = 0
         self._barwidth = self._maximum / self._bardiv
-        if self._barwidth < 2:
-            self._barwidth = 2
+        self._barwidth = max(self._barwidth, 2)
         stopx = self._startx + self._barwidth
         if stopx > self._maximum:
             stopx = self._maximum
@@ -49,8 +47,7 @@ class ActivityBar(tkinter.Frame):
         self._canv.update_idletasks()
 
     def _set(self):
-        if self._startx < 0:
-            self._startx = 0
+        self._startx = max(self._startx, 0)
         if self._startx > self._maximum:
             self._startx = self._startx % self._maximum
         stopx = self._startx + self._barwidth
@@ -70,8 +67,7 @@ class ActivityBar(tkinter.Frame):
     def _step(self):
         if self._running:
             stepsize = self._barwidth / 4
-            if stepsize < 2:
-                stepsize = 2
+            stepsize = max(stepsize, 2)
             self._startx += stepsize
             self._set()
             self.after(self._interval, self._step)

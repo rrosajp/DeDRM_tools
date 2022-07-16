@@ -41,7 +41,10 @@ def unicode_argv():
         return ["DeDRM.py"]
     else:
         argvencoding = sys.stdin.encoding or "utf-8"
-        return [arg if (isinstance(arg, str) or isinstance(arg,unicode)) else str(arg, argvencoding) for arg in sys.argv]
+        return [
+            arg if isinstance(arg, (str, unicode)) else str(arg, argvencoding)
+            for arg in sys.argv
+        ]
 
 
 def add_cp65001_codec():
@@ -54,34 +57,34 @@ def add_cp65001_codec():
 
 
 def set_utf8_default_encoding():
-  if sys.getdefaultencoding() == 'utf-8':
-    return
+    if sys.getdefaultencoding() == 'utf-8':
+      return
 
-  # Regenerate setdefaultencoding.
-  importlib.reload(sys)
-  sys.setdefaultencoding('utf-8')
+    # Regenerate setdefaultencoding.
+    importlib.reload(sys)
+    sys.setdefaultencoding('utf-8')
 
-  for attr in dir(locale):
-    if attr[0:3] != 'LC_':
-      continue
-    aref = getattr(locale, attr)
+    for attr in dir(locale):
+        if attr[:3] != 'LC_':
+            continue
+        aref = getattr(locale, attr)
+        try:
+          locale.setlocale(aref, '')
+        except locale.Error:
+          continue
+        try:
+          lang = locale.getlocale(aref)[0]
+        except (TypeError, ValueError):
+          continue
+        if lang:
+            try:
+                locale.setlocale(aref, (lang, 'UTF-8'))
+            except locale.Error:
+                os.environ[attr] = f'{lang}.UTF-8'
     try:
-      locale.setlocale(aref, '')
+      locale.setlocale(locale.LC_ALL, '')
     except locale.Error:
-      continue
-    try:
-      lang = locale.getlocale(aref)[0]
-    except (TypeError, ValueError):
-      continue
-    if lang:
-      try:
-        locale.setlocale(aref, (lang, 'UTF-8'))
-      except locale.Error:
-        os.environ[attr] = lang + '.UTF-8'
-  try:
-    locale.setlocale(locale.LC_ALL, '')
-  except locale.Error:
-    pass
-  return
+      pass
+    return
 
 

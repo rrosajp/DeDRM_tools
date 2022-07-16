@@ -48,10 +48,10 @@ class SafeUnbuffered:
     def __init__(self, stream):
         self.stream = stream
         self.encoding = stream.encoding
-        if self.encoding == None:
+        if self.encoding is None:
             self.encoding = "utf-8"
     def write(self, data):
-        if isinstance(data,str) or isinstance(data,unicode):
+        if isinstance(data, (str, unicode)):
             # str for Python3, unicode for Python2
             data = data.encode(self.encoding,"replace")
         try:
@@ -105,7 +105,10 @@ def unicode_argv():
         return ["kindlekey.py"]
     else:
         argvencoding = sys.stdin.encoding or "utf-8"
-        return [arg if (isinstance(arg, str) or isinstance(arg,unicode)) else str(arg, argvencoding) for arg in sys.argv]
+        return [
+            arg if isinstance(arg, (str, unicode)) else str(arg, argvencoding)
+            for arg in sys.argv
+        ]
 
 class DrmException(Exception):
     pass
@@ -116,17 +119,12 @@ STORAGE2 = "map_data_storage.db"
 
 
 def unpad(data, padding=16):
-    if sys.version_info[0] == 2:
-        pad_len = ord(data[-1])
-    else:
-        pad_len = data[-1]
-
+    pad_len = ord(data[-1]) if sys.version_info[0] == 2 else data[-1]
     return data[:-pad_len]
 
 def pad(data, padding_len=16):
     padding_data_len = padding_len - (len(data) % padding_len)
-    plaintext = data + chr(padding_data_len) * padding_data_len
-    return plaintext
+    return data + chr(padding_data_len) * padding_data_len
 
 class AndroidObfuscation(object):
     '''AndroidObfuscation
@@ -166,16 +164,15 @@ class AndroidObfuscationV2(AndroidObfuscation):
 def parse_preference(path):
     ''' parse android's shared preference xml '''
     storage = {}
-    read = open(path)
-    for line in read:
-        line = line.strip()
-        # <string name="key">value</string>
-        if line.startswith('<string name="'):
-            index = line.find('"', 14)
-            key = line[14:index]
-            value = line[index+2:-9]
-            storage[key] = value
-    read.close()
+    with open(path) as read:
+        for line in read:
+            line = line.strip()
+            # <string name="key">value</string>
+            if line.startswith('<string name="'):
+                index = line.find('"', 14)
+                key = line[14:index]
+                value = line[index+2:-9]
+                storage[key] = value
     return storage
 
 def get_serials1(path=STORAGE1):
@@ -194,9 +191,7 @@ def get_serials1(path=STORAGE1):
     def get_value(key):
         encrypted_key = obfuscation.encrypt(key)
         encrypted_value = storage.get(encrypted_key)
-        if encrypted_value:
-            return obfuscation.decrypt(encrypted_value)
-        return ''
+        return obfuscation.decrypt(encrypted_value) if encrypted_value else ''
 
     # also see getK4Pids in kgenpids.py
     try:
@@ -216,7 +211,7 @@ def get_serials1(path=STORAGE1):
         serials.append(dsnid)
     for token in tokens:
         if token:
-            serials.append('%s%s' % (dsnid, token))
+            serials.append(f'{dsnid}{token}')
             serials.append(token)
     return serials
 
@@ -233,13 +228,15 @@ def get_serials2(path=STORAGE2):
     dsns = []
     for device_data_row in device_data_keys:
         try:
-            if device_data_row and device_data_row[0]:
-                if len(device_data_row[0]) > 0:
-                    dsns.append(device_data_row[0])
+            if (
+                device_data_row
+                and device_data_row[0]
+                and len(device_data_row[0]) > 0
+            ):
+                dsns.append(device_data_row[0])
         except:
             print("Error getting one of the device serial name keys")
             traceback.print_exc()
-            pass
     dsns = list(set(dsns))
 
     cursor.execute('''select userdata_value from userdata where userdata_key like '%/%kindle.account.tokens%' ''')
@@ -247,25 +244,21 @@ def get_serials2(path=STORAGE2):
     tokens = []
     for userdata_row in userdata_keys:
         try:
-            if userdata_row and userdata_row[0]:
-                if len(userdata_row[0]) > 0:
-                    if ',' in userdata_row[0]:
-                        splits = userdata_row[0].split(',')
-                        for split in splits:
-                            tokens.append(split)
-                    tokens.append(userdata_row[0])
+            if userdata_row and userdata_row[0] and len(userdata_row[0]) > 0:
+                if ',' in userdata_row[0]:
+                    splits = userdata_row[0].split(',')
+                    tokens.extend(iter(splits))
+                tokens.append(userdata_row[0])
         except:
             print("Error getting one of the account token keys")
             traceback.print_exc()
-            pass
     tokens = list(set(tokens))
 
     serials = []
     for x in dsns:
         serials.append(x)
         for y in tokens:
-            serials.append(y)
-            serials.append(x+y)
+            serials.extend((y, x+y))
     return serials
 
 def get_serials(path=STORAGE):
@@ -404,6 +397,8 @@ def gui_main():
         print("tkinter not installed")
         return 0
 
+
+
     class DecryptionDialog(tkinter.Frame):
         def __init__(self, root):
             tkinter.Frame.__init__(self, root, border=5)
@@ -430,12 +425,15 @@ def gui_main():
             button3.pack(side=tkinter.constants.RIGHT)
 
         def get_keypath(self):
-            keypath = tkinter.filedialog.askopenfilename(
-                parent=None, title="Select backup.ab file",
+            if keypath := tkinter.filedialog.askopenfilename(
+                parent=None,
+                title="Select backup.ab file",
                 defaultextension=".ab",
-                filetypes=[('adb backup com.amazon.kindle', '.ab'),
-                           ('All Files', '.*')])
-            if keypath:
+                filetypes=[
+                    ('adb backup com.amazon.kindle', '.ab'),
+                    ('All Files', '.*'),
+                ],
+            ):
                 keypath = os.path.normpath(keypath)
                 self.keypath.delete(0, tkinter.constants.END)
                 self.keypath.insert(0, keypath)
@@ -447,6 +445,7 @@ def gui_main():
             try:
                 keys = get_serials(inpath)
                 keycount = 0
+                success = True
                 for key in keys:
                     while True:
                         keycount += 1
@@ -456,12 +455,12 @@ def gui_main():
 
                     with open(outfile, 'w') as keyfileout:
                         keyfileout.write(key)
-                    success = True
                     tkinter.messagebox.showinfo(progname, "Key successfully retrieved to {0}".format(outfile))
             except Exception as e:
                 self.status['text'] = "Error: {0}".format(e.args[0])
                 return
             self.status['text'] = "Select backup.ab file"
+
 
     argv=unicode_argv()
     progpath, progname = os.path.split(argv[0])
