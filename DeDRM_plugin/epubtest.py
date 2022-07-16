@@ -64,10 +64,10 @@ class SafeUnbuffered:
     def __init__(self, stream):
         self.stream = stream
         self.encoding = stream.encoding
-        if self.encoding == None:
+        if self.encoding is None:
             self.encoding = "utf-8"
     def write(self, data):
-        if isinstance(data,str) or isinstance(data,unicode):
+        if isinstance(data, (str, unicode)):
             # str for Python3, unicode for Python2
             data = data.encode(self.encoding,"replace")
         try:
@@ -121,7 +121,10 @@ def unicode_argv():
         return ["epubtest.py"]
     else:
         argvencoding = sys.stdin.encoding or "utf-8"
-        return [arg if (isinstance(arg, str) or isinstance(arg,unicode)) else str(arg, argvencoding) for arg in sys.argv]
+        return [
+            arg if isinstance(arg, (str, unicode)) else str(arg, argvencoding)
+            for arg in sys.argv
+        ]
 
 _FILENAME_LEN_OFFSET = 26
 _EXTRA_LEN_OFFSET = 28
@@ -133,8 +136,8 @@ def uncompress(cmpdata):
     dc = zlib.decompressobj(-15)
     data = ''
     while len(cmpdata) > 0:
-        if len(cmpdata) > _MAX_SIZE :
-            newdata = cmpdata[0:_MAX_SIZE]
+        if len(cmpdata) > _MAX_SIZE:
+            newdata = cmpdata[:_MAX_SIZE]
             cmpdata = cmpdata[_MAX_SIZE:]
         else:
             newdata = cmpdata
@@ -181,7 +184,7 @@ def encryption(infile):
         with open(infile,'rb') as infileobject:
             bookdata = infileobject.read(58)
             # Check for Zip
-            if bookdata[0:0+2] == b"PK":
+            if bookdata[: 0 + 2] == b"PK":
                 inzip = zipfile.ZipFile(infile,'r')
                 namelist = set(inzip.namelist())
                 if (
@@ -197,21 +200,21 @@ def encryption(infile):
                 elif 'META-INF/rights.xml' in namelist and b"<kdrm>" in inzip.read("META-INF/rights.xml"):
                     # Untested, just found this info on Google
                     encryption = "Kobo"
-                
+
                 elif 'META-INF/rights.xml' not in namelist or 'META-INF/encryption.xml' not in namelist:
                     encryption = "Unencrypted"
                 else:
                     try: 
                         rights = etree.fromstring(inzip.read('META-INF/rights.xml'))
                         adept = lambda tag: '{%s}%s' % (NSMAP['adept'], tag)
-                        expr = './/%s' % (adept('encryptedKey'),)
+                        expr = f".//{adept('encryptedKey')}"
                         bookkey = ''.join(rights.findtext(expr))
                         if len(bookkey) >= 172:
                             encryption = "Adobe"
                         elif len(bookkey) == 64:
                             encryption = "B&N"
                         else:
-                            encryption = "Unknown (key len " + str(len(bookkey)) + ")"
+                            encryption = f"Unknown (key len {len(bookkey)})"
                     except: 
                         encryption = "Unknown"
     except:

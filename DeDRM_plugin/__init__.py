@@ -141,10 +141,10 @@ class SafeUnbuffered:
     def __init__(self, stream):
         self.stream = stream
         self.encoding = stream.encoding
-        if self.encoding == None:
+        if self.encoding is None:
             self.encoding = "utf-8"
     def write(self, data):
-        if isinstance(data,str) or isinstance(data,unicode):
+        if isinstance(data, (str, unicode)):
             # str for Python3, unicode for Python2
             data = data.encode(self.encoding,"replace")
         try:
@@ -230,8 +230,6 @@ class DeDRM(FileTypePlugin):
                     except:
                         print("{0} v{1}: Exception when copying needed library files".format(PLUGIN_NAME, PLUGIN_VERSION))
                         traceback.print_exc()
-                        pass
-
                 # mark that this version has been initialized
                 os.mkdir(self.verdir)
         except Exception as e:

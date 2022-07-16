@@ -92,10 +92,10 @@ class SafeUnbuffered:
     def __init__(self, stream):
         self.stream = stream
         self.encoding = stream.encoding
-        if self.encoding == None:
+        if self.encoding is None:
             self.encoding = "utf-8"
     def write(self, data):
-        if isinstance(data,str) or isinstance(data,unicode):
+        if isinstance(data, (str, unicode)):
             # str for Python3, unicode for Python2
             data = data.encode(self.encoding,"replace")
         try:
@@ -146,7 +146,10 @@ def unicode_argv():
         return ["mobidedrm.py"]
     else:
         argvencoding = sys.stdin.encoding or "utf-8"
-        return [arg if (isinstance(arg, str) or isinstance(arg,unicode)) else str(arg, argvencoding) for arg in sys.argv]
+        return [
+            arg if isinstance(arg, (str, unicode)) else str(arg, argvencoding)
+            for arg in sys.argv
+        ]
 
 
 class DrmException(Exception):
@@ -162,20 +165,15 @@ def PC1(key, src, decryption=True):
     # if we can get it from alfcrypto, use that
     try:
         return Pukall_Cipher().PC1(key,src,decryption)
-    except NameError:
+    except (NameError, TypeError):
         pass
-    except TypeError:
-        pass
-
     # use slow python version, since Pukall_Cipher didn't load
     sum1 = 0;
     sum2 = 0;
     keyXorVal = 0;
     if len(key)!=16:
          DrmException ("PC1: Bad key length")
-    wkey = []
-    for i in range(8):
-        wkey.append(key[i*2]<<8 | key[i*2+1])
+    wkey = [key[i*2]<<8 | key[i*2+1] for i in range(8)]
     dst = bytearray(len(src))
     for i in range(len(src)):
         temp1 = 0;
@@ -205,7 +203,7 @@ def checksumPid(s):
     crc = crc ^ (crc >> 16)
     res = s
     l = len(letters)
-    for i in (0,1):
+    for _ in (0, 1):
         b = crc & 0xff
         pos = (b // l) ^ (b % l)
         res += letters[pos%l]
@@ -264,8 +262,8 @@ class MobiBook:
         # initial sanity check on file
         self.data_file = open(infile, 'rb').read()
         self.mobi_data = ''
-        self.header = self.data_file[0:78]
-        if self.header[0x3C:0x3C+8] != b'BOOKMOBI' and self.header[0x3C:0x3C+8] != b'TEXtREAd':
+        self.header = self.data_file[:78]
+        if self.header[0x3C : 0x3C + 8] not in [b'BOOKMOBI', b'TEXtREAd']:
             raise DrmException("Invalid file format")
         self.magic = self.header[0x3C:0x3C+8]
         self.crypto_type = -1
@@ -281,7 +279,7 @@ class MobiBook:
         # parse information from section 0
         self.sect = self.loadSection(0)
         self.records, = struct.unpack('>H', self.sect[0x8:0x8+2])
-        self.compression, = struct.unpack('>H', self.sect[0x0:0x0+2])
+        self.compression, = struct.unpack('>H', self.sect[:0x0+2])
 
         # det default values before PalmDoc test
         self.print_replica = False
@@ -310,13 +308,11 @@ class MobiBook:
         # if exth region exists parse it for metadata array
         try:
             exth_flag, = struct.unpack('>L', self.sect[0x80:0x84])
-            exth = b''
-            if exth_flag & 0x40:
-                exth = self.sect[16 + self.mobi_length:]
+            exth = self.sect[16 + self.mobi_length:] if exth_flag & 0x40 else b''
             if (len(exth) >= 12) and (exth[:4] == b'EXTH'):
                 nitems, = struct.unpack('>I', exth[8:12])
                 pos = 12
-                for i in range(nitems):
+                for _ in range(nitems):
                     type, size = struct.unpack('>II', exth[pos: pos + 8])
                     content = exth[pos + 8: pos + size]
                     self.meta_array[type] = content
@@ -324,11 +320,8 @@ class MobiBook:
                     if type == 401 and size == 9:
                         # set clipping limit to 100%
                         self.patchSection(0, b'\144', 16 + self.mobi_length + pos + 8)
-                    elif type == 404 and size == 9:
+                    elif type == 404 and size == 9 or type == 405 and size == 9:
                         # make sure text to speech is enabled
-                        self.patchSection(0, b'\0', 16 + self.mobi_length + pos + 8)
-                    elif type == 405 and size == 9:
-                        # remove rented book flag
                         self.patchSection(0, b'\0', 16 + self.mobi_length + pos + 8)
                     elif type == 406 and size == 16:
                         # remove rental due date
@@ -356,7 +349,7 @@ class MobiBook:
                 toff, tlen = struct.unpack('>II', self.sect[0x54:0x5c])
                 tend = toff + tlen
                 title = self.sect[toff:tend]
-            if self.mobi_codepage in codec_map.keys():
+            if self.mobi_codepage in codec_map:
                 codec = codec_map[self.mobi_codepage]
         if title == b'':
             title = self.header[:32]
@@ -441,9 +434,7 @@ class MobiBook:
     def getBookExtension(self):
         if self.print_replica:
             return ".azw4"
-        if self.mobi_version >= 8:
-            return ".azw3"
-        return ".mobi"
+        return ".azw3" if self.mobi_version >= 8 else ".mobi"
 
     # pids in pidlist may be unicode or bytearrays or bytes
     def processBook(self, pidlist):
@@ -453,10 +444,10 @@ class MobiBook:
         if crypto_type == 0:
             print("This book is not encrypted.")
             # we must still check for Print Replica
-            self.print_replica = (self.loadSection(1)[0:4] == b'%MOP')
+            self.print_replica = self.loadSection(1)[:4] == b'%MOP'
             self.mobi_data = self.data_file
             return
-        if crypto_type != 2 and crypto_type != 1:
+        if crypto_type not in [2, 1]:
             raise DrmException("Cannot decode unknown Mobipocket encryption type {0:d}".format(crypto_type))
         if 406 in self.meta_array:
             data406 = self.meta_array[406]
@@ -471,9 +462,14 @@ class MobiBook:
             if isinstance(pid,(bytearray,bytes)):
                 pid = pid.decode('utf-8')
             if len(pid)==10:
-                if checksumPid(pid[0:-2]) != pid:
-                    print("Warning: PID {0} has incorrect checksum, should have been {1}".format(pid,checksumPid(pid[0:-2])))
-                goodpids.append(pid[0:-2])
+                if checksumPid(pid[:-2]) != pid:
+                    print(
+                        "Warning: PID {0} has incorrect checksum, should have been {1}".format(
+                            pid, checksumPid(pid[:-2])
+                        )
+                    )
+
+                goodpids.append(pid[:-2])
             elif len(pid)==8:
                 goodpids.append(pid)
             else:
@@ -514,17 +510,16 @@ class MobiBook:
 
         # decrypt sections
         print("Decrypting. Please wait . . .", end=' ')
-        mobidataList = []
-        mobidataList.append(self.data_file[:self.sections[1][0]])
+        mobidataList = [self.data_file[:self.sections[1][0]]]
         for i in range(1, self.records+1):
             data = self.loadSection(i)
             extra_size = getSizeOfTrailingDataEntries(data, len(data), self.extra_data_flags)
             if i%100 == 0:
                 print(".", end=' ')
             # print "record %d, extra_size %d" %(i,extra_size)
-            decoded_data = PC1(found_key, data[0:len(data) - extra_size])
+            decoded_data = PC1(found_key, data[:len(data) - extra_size])
             if i==1:
-                self.print_replica = (decoded_data[0:4] == b'%MOP')
+                self.print_replica = decoded_data[:4] == b'%MOP'
             mobidataList.append(decoded_data)
             if extra_size > 0:
                 mobidataList.append(data[-extra_size:])
@@ -555,10 +550,7 @@ def cli_main():
     else:
         infile = argv[1]
         outfile = argv[2]
-        if len(argv) == 4:
-            pidlist = argv[3].split(',')
-        else:
-            pidlist = []
+        pidlist = argv[3].split(',') if len(argv) == 4 else []
         try:
             stripped_file = getUnencryptedBook(infile, pidlist)
             open(outfile, 'wb').write(stripped_file)

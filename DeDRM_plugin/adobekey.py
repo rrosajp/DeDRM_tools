@@ -52,10 +52,10 @@ class SafeUnbuffered:
     def __init__(self, stream):
         self.stream = stream
         self.encoding = stream.encoding
-        if self.encoding == None:
+        if self.encoding is None:
             self.encoding = "utf-8"
     def write(self, data):
-        if isinstance(data,str) or isinstance(data,unicode):
+        if isinstance(data, (str, unicode)):
             # str for Python3, unicode for Python2
             data = data.encode(self.encoding,"replace")
         try:
@@ -109,7 +109,10 @@ def unicode_argv():
         return ["adobekey.py"]
     else:
         argvencoding = sys.stdin.encoding or "utf-8"
-        return [arg if (isinstance(arg, str) or isinstance(arg,unicode)) else str(arg, argvencoding) for arg in sys.argv]
+        return [
+            arg if isinstance(arg, (str, unicode)) else str(arg, argvencoding)
+            for arg in sys.argv
+        ]
 
 class ADEPTError(Exception):
     pass
@@ -132,11 +135,7 @@ if iswindows:
         from Crypto.Cipher import AES
 
     def unpad(data, padding=16):
-        if sys.version_info[0] == 2:
-            pad_len = ord(data[-1])
-        else:
-            pad_len = data[-1]
-
+        pad_len = ord(data[-1]) if sys.version_info[0] == 2 else data[-1]
         return data[:-pad_len]
 
     DEVICE_KEY_PATH = r'Software\Adobe\Adept\Device'
@@ -203,8 +202,7 @@ if iswindows:
         try: 
             DEVICE_KEY_PATH = r'Software\Adobe\Adept\Device'
             regkey = OpenKey(HKEY_CURRENT_USER, DEVICE_KEY_PATH)
-            userREG = QueryValueEx(regkey, 'username')[0].encode('utf-16-le')[::2]
-            return userREG
+            return QueryValueEx(regkey, 'username')[0].encode('utf-16-le')[::2]
         except: 
             return None
 
@@ -361,12 +359,12 @@ if iswindows:
             except:
                 # No more keys
                 break
-                
+
             ktype = winreg.QueryValueEx(plkparent, None)[0]
             if ktype != 'credentials':
                 continue
             uuid_name = ""
-            for j in range(0, 16):
+            for j in range(16):
                 try:
                     plkkey = winreg.OpenKey(plkparent, "%04d" % (j,))
                 except (WindowsError, FileNotFoundError):
@@ -396,7 +394,7 @@ if iswindows:
             else:
                 names.append(uuid_name[:-1])
 
-        if len(keys) == 0:
+        if not keys:
             raise ADEPTError('Could not locate privateLicenseKey')
         print("Found {0:d} keys".format(len(keys)))
         return keys, names
@@ -427,9 +425,7 @@ elif isosx:
             if pp >= 0:
                 ActDatPath = resline
                 break
-        if os.path.exists(ActDatPath):
-            return ActDatPath
-        return None
+        return ActDatPath if os.path.exists(ActDatPath) else None
 
     def adeptkeys():
         # TODO: All the code to support extracting multiple activation keys
@@ -439,30 +435,24 @@ elif isosx:
             raise ADEPTError("Could not find ADE activation.dat file.")
         tree = etree.parse(actpath)
         adept = lambda tag: '{%s}%s' % (NSMAP['adept'], tag)
-        expr = '//%s/%s' % (adept('credentials'), adept('privateLicenseKey'))
+        expr = f"//{adept('credentials')}/{adept('privateLicenseKey')}"
         userkey = tree.findtext(expr)
 
-        exprUUID = '//%s/%s' % (adept('credentials'), adept('user'))
+        exprUUID = f"//{adept('credentials')}/{adept('user')}"
         keyName = ""
         try: 
-            keyName = tree.findtext(exprUUID)[9:] + "_"
+            keyName = f"{tree.findtext(exprUUID)[9:]}_"
         except: 
             pass
 
         try: 
-            exprMail = '//%s/%s' % (adept('credentials'), adept('username'))
+            exprMail = f"//{adept('credentials')}/{adept('username')}"
             keyName = keyName + tree.find(exprMail).attrib["method"] + "_"
             keyName = keyName + tree.findtext(exprMail) + "_"
         except:
             pass
 
-        if keyName == "":
-            keyName = "Unknown"
-        else:
-            keyName = keyName[:-1]
-
-
-
+        keyName = keyName[:-1] if keyName else "Unknown"
         userkey = b64decode(userkey)
         userkey = userkey[26:]
         return [userkey], [keyName]
@@ -470,7 +460,6 @@ elif isosx:
 else:
     def adeptkeys():
         raise ADEPTError("This script only supports Windows and Mac OS X.")
-        return [], []
 
 # interface for Python DeDRM
 def getkey(outpath):
@@ -483,8 +472,7 @@ def getkey(outpath):
             print("Saved a key to {0}".format(outfile))
         else:
             keycount = 0
-            name_index = 0
-            for key in keys:
+            for name_index, key in enumerate(keys):
                 while True:
                     keycount += 1
                     outfile = os.path.join(outpath,"adobekey{0:d}_uuid_{1}.der".format(keycount, names[name_index]))
@@ -493,7 +481,6 @@ def getkey(outpath):
                 with open(outfile, 'wb') as keyfileout:
                     keyfileout.write(key)
                 print("Saved a key to {0}".format(outfile))
-                name_index += 1
         return True
     return False
 
@@ -548,8 +535,7 @@ def cli_main():
             print("Saved a key to {0}".format(outfile))
         else:
             keycount = 0
-            name_index = 0
-            for key in keys:
+            for name_index, key in enumerate(keys):
                 while True:
                     keycount += 1
                     outfile = os.path.join(outpath,"adobekey{0:d}_uuid_{1}.der".format(keycount, names[name_index]))
@@ -558,7 +544,6 @@ def cli_main():
                 with open(outfile, 'wb') as keyfileout:
                     keyfileout.write(key)
                 print("Saved a key to {0}".format(outfile))
-                name_index += 1
     else:
         print("Could not retrieve Adobe Adept key.")
     return 0
@@ -595,8 +580,7 @@ def gui_main():
         print(keys)
         print(names)
         keycount = 0
-        name_index = 0
-        for key in keys:
+        for name_index, key in enumerate(keys):
             while True:
                 keycount += 1
                 outfile = os.path.join(progpath,"adobekey{0:d}_uuid_{1}.der".format(keycount, names[name_index]))
@@ -607,7 +591,6 @@ def gui_main():
                 keyfileout.write(key)
             success = True
             tkinter.messagebox.showinfo(progname, "Key successfully retrieved to {0}".format(outfile))
-            name_index += 1
     except ADEPTError as e:
         tkinter.messagebox.showerror(progname, "Error: {0}".format(str(e)))
     except Exception:
@@ -616,9 +599,7 @@ def gui_main():
         text = traceback.format_exc()
         ExceptionDialog(root, text).pack(fill=tkinter.constants.BOTH, expand=1)
         root.mainloop()
-    if not success:
-        return 1
-    return 0
+    return 0 if success else 1
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:

@@ -89,23 +89,26 @@ def getTwoBitsFromBitField(bitField,offset):
 # Returns the six bits at offset from a bit field
 def getSixBitsFromBitField(bitField,offset):
     offset *= 3
-    value = (getTwoBitsFromBitField(bitField,offset) <<4) + (getTwoBitsFromBitField(bitField,offset+1) << 2) +getTwoBitsFromBitField(bitField,offset+2)
-    return value
+    return (
+        (getTwoBitsFromBitField(bitField, offset) << 4)
+        + (getTwoBitsFromBitField(bitField, offset + 1) << 2)
+        + getTwoBitsFromBitField(bitField, offset + 2)
+    )
 
 # 8 bits to six bits encoding from hash to generate PID string
 def encodePID(hash):
     global charMap3
     PID = b''
-    for position in range (0,8):
+    for position in range(8):
         PID += bytes([charMap3[getSixBitsFromBitField(hash,position)]])
     return PID
 
 # Encryption table used to generate the device PID
-def generatePidEncryptionTable() :
+def generatePidEncryptionTable():
     table = []
-    for counter1 in range (0,0x100):
+    for counter1 in range(0x100):
         value = counter1
-        for counter2 in range (0,8):
+        for _ in range(8):
             if (value & 1 == 0) :
                 value = value >> 1
             else :
@@ -115,9 +118,9 @@ def generatePidEncryptionTable() :
     return table
 
 # Seed value used to generate the device PID
-def generatePidSeed(table,dsn) :
+def generatePidSeed(table,dsn):
     value = 0
-    for counter in range (0,4) :
+    for counter in range(4):
         index = (dsn[counter] ^ value) & 0xFF
         value = (value >> 8) ^ table[index]
     return value
@@ -129,10 +132,10 @@ def generateDevicePID(table,dsn,nbRoll):
     pidAscii = b''
     pid = [(seed >>24) &0xFF,(seed >> 16) &0xff,(seed >> 8) &0xFF,(seed) & 0xFF,(seed>>24) & 0xFF,(seed >> 16) &0xff,(seed >> 8) &0xFF,(seed) & 0xFF]
     index = 0
-    for counter in range (0,nbRoll):
+    for counter in range(nbRoll):
         pid[index] = pid[index] ^ dsn[counter]
         index = (index+1) %8
-    for counter in range (0,8):
+    for counter in range(8):
         index = ((((pid[counter] >>5) & 3) ^ pid[counter]) & 0x1f) + (pid[counter] >> 7)
         pidAscii += bytes([charMap4[index]])
     return pidAscii
@@ -147,7 +150,7 @@ def checksumPid(s):
     crc = crc ^ (crc >> 16)
     res = s
     l = len(charMap4)
-    for i in (0,1):
+    for _ in (0, 1):
         b = crc & 0xff
         pos = (b // l) ^ (b % l)
         res += bytes([charMap4[pos%l]])
@@ -180,14 +183,11 @@ def getKindlePids(rec209, token, serialnum):
     if rec209 is None:
         return [serialnum]
 
-    pids=[]
-
     # Compute book PID
     pidHash = SHA1(serialnum+rec209+token)
     bookPID = encodePID(pidHash)
     bookPID = checksumPid(bookPID)
-    pids.append(bookPID)
-
+    pids = [bookPID]
     # compute fixed pid for old pre 2.5 firmware update pid as well
     kindlePID = pidFromSerial(serialnum, 7) + b"*"
     kindlePID = checksumPid(kindlePID)
@@ -210,8 +210,6 @@ def getK4Pids(rec209, token, kindleDatabase):
 
     except KeyError:
         kindleAccountToken = b''
-        pass
-
     try:
         # Get the DSN token, if present
         DSN = bytearray.fromhex((kindleDatabase[1])['DSN'])
@@ -251,9 +249,6 @@ def getK4Pids(rec209, token, kindleDatabase):
 
         # concat, hash and encode to calculate the DSN
         DSN = encode(SHA1(MazamaRandomNumber+encodedIDString+encodedUsername),charMap1)
-        #print "DSN",DSN.encode('hex')
-        pass
-
     if rec209 is None:
         pids.append(DSN+kindleAccountToken)
         return pids

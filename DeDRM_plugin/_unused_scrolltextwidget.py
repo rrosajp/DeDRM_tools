@@ -13,7 +13,7 @@ class ScrolledText(tkinter.Text):
         self.frame = tkinter.Frame(master)
         self.vbar = tkinter.Scrollbar(self.frame)
         self.vbar.pack(side=tkinter.constants.RIGHT, fill=tkinter.constants.Y)
-        kw.update({'yscrollcommand': self.vbar.set})
+        kw['yscrollcommand'] = self.vbar.set
         tkinter.Text.__init__(self, self.frame, **kw)
         self.pack(side=tkinter.constants.LEFT, fill=tkinter.constants.BOTH, expand=True)
         self.vbar['command'] = self.yview

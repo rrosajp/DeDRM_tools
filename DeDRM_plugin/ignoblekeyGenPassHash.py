@@ -57,10 +57,10 @@ class SafeUnbuffered:
     def __init__(self, stream):
         self.stream = stream
         self.encoding = stream.encoding
-        if self.encoding == None:
+        if self.encoding is None:
             self.encoding = "utf-8"
     def write(self, data):
-        if isinstance(data,str) or isinstance(data,unicode):
+        if isinstance(data, (str, unicode)):
             # str for Python3, unicode for Python2
             data = data.encode(self.encoding,"replace")
         try:
@@ -114,7 +114,10 @@ def unicode_argv():
         return ["ignoblekeygen.py"]
     else:
         argvencoding = sys.stdin.encoding or "utf-8"
-        return [arg if (isinstance(arg, str) or isinstance(arg,unicode)) else str(arg, argvencoding) for arg in sys.argv]
+        return [
+            arg if isinstance(arg, (str, unicode)) else str(arg, argvencoding)
+            for arg in sys.argv
+        ]
 
 
 class IGNOBLEError(Exception):
@@ -169,6 +172,8 @@ def gui_main():
     except:
         return cli_main()
 
+
+
     class DecryptionDialog(tkinter.Frame):
         def __init__(self, root):
             tkinter.Frame.__init__(self, root, border=5)
@@ -201,12 +206,15 @@ def gui_main():
             button.pack(side=tkinter.constants.RIGHT)
 
         def get_keypath(self):
-            keypath = tkinter.filedialog.asksaveasfilename(
-                parent=None, title="Select B&N ePub key file to produce",
+            if keypath := tkinter.filedialog.asksaveasfilename(
+                parent=None,
+                title="Select B&N ePub key file to produce",
                 defaultextension=".b64",
-                filetypes=[('base64-encoded files', '.b64'),
-                           ('All Files', '.*')])
-            if keypath:
+                filetypes=[
+                    ('base64-encoded files', '.b64'),
+                    ('All Files', '.*'),
+                ],
+            ):
                 keypath = os.path.normpath(keypath)
                 self.keypath.delete(0, tkinter.constants.END)
                 self.keypath.insert(0, keypath)
@@ -233,6 +241,7 @@ def gui_main():
                 return
             open(keypath,'wb').write(userkey)
             self.status['text'] = "Keyfile successfully generated"
+
 
     root = tkinter.Tk()
     root.title("Barnes & Noble ePub Keyfile Generator v.{0}".format(__version__))

@@ -34,10 +34,10 @@ class SafeUnbuffered:
     def __init__(self, stream):
         self.stream = stream
         self.encoding = stream.encoding
-        if self.encoding == None:
+        if self.encoding is None:
             self.encoding = "utf-8"
     def write(self, data):
-        if isinstance(data,str) or isinstance(data,unicode):
+        if isinstance(data, (str, unicode)):
             # str for Python3, unicode for Python2
             data = data.encode(self.encoding,"replace")
         try:
@@ -91,7 +91,10 @@ def unicode_argv():
         return ["ignoblekey.py"]
     else:
         argvencoding = sys.stdin.encoding or "utf-8"
-        return [arg if (isinstance(arg, str) or isinstance(arg,unicode)) else str(arg, argvencoding) for arg in sys.argv]
+        return [
+            arg if isinstance(arg, (str, unicode)) else str(arg, argvencoding)
+            for arg in sys.argv
+        ]
 
 class DrmException(Exception):
     pass
@@ -157,30 +160,34 @@ def getNookLogFiles():
             logpath = path +'\\Barnes & Noble\\NOOKstudy\\logs\\BNClientLog.txt'
             if os.path.isfile(logpath):
                 found = True
-                print('Found nookStudy log file: ' + logpath, file=sys.stderr)
+                print(f'Found nookStudy log file: {logpath}', file=sys.stderr)
                 logFiles.append(logpath)
     else:
         home = os.getenv('HOME')
         # check for BNClientLog.txt in various locations
-        testpath = home + '/Library/Application Support/Barnes & Noble/DesktopReader/logs/BNClientLog.txt'
+        testpath = f'{home}/Library/Application Support/Barnes & Noble/DesktopReader/logs/BNClientLog.txt'
+
         if os.path.isfile(testpath):
             logFiles.append(testpath)
-            print('Found nookStudy log file: ' + testpath, file=sys.stderr)
+            print(f'Found nookStudy log file: {testpath}', file=sys.stderr)
             found = True
-        testpath = home + '/Library/Application Support/Barnes & Noble/DesktopReader/indices/BNClientLog.txt'
+        testpath = f'{home}/Library/Application Support/Barnes & Noble/DesktopReader/indices/BNClientLog.txt'
+
         if os.path.isfile(testpath):
             logFiles.append(testpath)
-            print('Found nookStudy log file: ' + testpath, file=sys.stderr)
+            print(f'Found nookStudy log file: {testpath}', file=sys.stderr)
             found = True
-        testpath = home + '/Library/Application Support/Barnes & Noble/BNDesktopReader/logs/BNClientLog.txt'
+        testpath = f'{home}/Library/Application Support/Barnes & Noble/BNDesktopReader/logs/BNClientLog.txt'
+
         if os.path.isfile(testpath):
             logFiles.append(testpath)
-            print('Found nookStudy log file: ' + testpath, file=sys.stderr)
+            print(f'Found nookStudy log file: {testpath}', file=sys.stderr)
             found = True
-        testpath = home + '/Library/Application Support/Barnes & Noble/BNDesktopReader/indices/BNClientLog.txt'
+        testpath = f'{home}/Library/Application Support/Barnes & Noble/BNDesktopReader/indices/BNClientLog.txt'
+
         if os.path.isfile(testpath):
             logFiles.append(testpath)
-            print('Found nookStudy log file: ' + testpath, file=sys.stderr)
+            print(f'Found nookStudy log file: {testpath}', file=sys.stderr)
             found = True
 
     if not found:
@@ -193,8 +200,7 @@ def getKeysFromLog(kLogFile):
     keys = []
     regex = re.compile("ccHash: \"(.{28})\"");
     for line in open(kLogFile):
-        for m in regex.findall(line):
-            keys.append(m)
+        keys.extend(iter(regex.findall(line)))
     return keys
 
 # interface for calibre plugin
@@ -203,8 +209,7 @@ def nookkeys(files = []):
     if files == []:
         files = getNookLogFiles()
     for file in files:
-        fileKeys = getKeysFromLog(file)
-        if fileKeys:
+        if fileKeys := getKeysFromLog(file):
             print("Found {0} keys in the Nook Study log files".format(len(fileKeys)), file=sys.stderr)
             keys.extend(fileKeys)
     return list(set(keys))
@@ -333,9 +338,7 @@ def gui_main():
         text = traceback.format_exc()
         ExceptionDialog(root, text).pack(fill=tkinter.constants.BOTH, expand=1)
         root.mainloop()
-    if not success:
-        return 1
-    return 0
+    return 0 if success else 1
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:

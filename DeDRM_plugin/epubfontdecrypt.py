@@ -38,7 +38,7 @@ class Decryptor(object):
         dsig = lambda tag: '{%s}%s' % ('http://www.w3.org/2000/09/xmldsig#', tag)
         self.obfuscation_key_Adobe = obfuscationkeyAdobe
         self.obfuscation_key_IETF = obfuscationkeyIETF
-        
+
         self._encryption = etree.fromstring(encryption)
         # This loops through all entries in the "encryption.xml" file
         # to figure out which files need to be decrypted.
@@ -48,11 +48,16 @@ class Decryptor(object):
 
         self._json_elements_to_remove = json_elements_to_remove = set()
         self._has_remaining_xml = False
-        expr = './%s/%s/%s' % (enc('EncryptedData'), enc('CipherData'),
-                               enc('CipherReference'))
+        expr = f"./{enc('EncryptedData')}/{enc('CipherData')}/{enc('CipherReference')}"
         for elem in self._encryption.findall(expr):
             path = elem.get('URI', None)
-            encryption_type_url = (elem.getparent().getparent().find("./%s" % (enc('EncryptionMethod'))).get('Algorithm', None))
+            encryption_type_url = (
+                elem.getparent()
+                .getparent()
+                .find(f"./{enc('EncryptionMethod')}")
+                .get('Algorithm', None)
+            )
+
             if path is not None:
 
                 if encryption_type_url == "http://www.idpf.org/2008/embedding":
@@ -78,7 +83,7 @@ class Decryptor(object):
                     other.add(path)
                     self._has_remaining_xml = True
                     # Other unsupported type.
-        
+
         for elem in json_elements_to_remove:
             elem.getparent().remove(elem)
 
@@ -92,8 +97,7 @@ class Decryptor(object):
         dc = zlib.decompressobj(-15)
         try:
             decompressed_bytes = dc.decompress(bytes)
-            ex = dc.decompress(b'Z') + dc.flush()
-            if ex:
+            if ex := dc.decompress(b'Z') + dc.flush():
                 decompressed_bytes = decompressed_bytes + ex
         except:
             # possibly not compressed by zip - just return bytes
@@ -135,7 +139,7 @@ class Decryptor(object):
 
     def deobfuscate_single_data(self, key, data):
         try: 
-            msg = bytes([c^k for c,k in zip(data, itertools.cycle(key))])
+            msg = bytes(c^k for c,k in zip(data, itertools.cycle(key)))
         except TypeError:
             # Python 2
             msg = ''.join(chr(ord(c)^ord(k)) for c,k in itertools.izip(data, itertools.cycle(key)))
@@ -235,29 +239,27 @@ def decryptFontsBook(inpath, outpath):
                         uid = identifier.text[9:]
                         break
 
-                
+
                 if uid is not None:
                     uid = uid.replace(chr(0x20),'').replace(chr(0x09),'')
                     uid = uid.replace(chr(0x0D),'').replace(chr(0x0A),'').replace('-','')
 
                     if len(uid) < 16:
                         uidMalformed = True
-                    if not all(c in "0123456789abcdefABCDEF" for c in uid):
+                    if any(c not in "0123456789abcdefABCDEF" for c in uid):
                         uidMalformed = True
-                    
-                    
+
+
                     if not uidMalformed:
                         print("found '{0}'".format(uid))
                         uid = uid + uid
                         adobe_master_encryption_key = binascii.unhexlify(uid[:32])
-                
+
                 if adobe_master_encryption_key is None:
                     print("not found")
 
             except:
                 print("exception")
-                pass
-
         # Begin decrypting.
 
         try:
@@ -278,16 +280,14 @@ def decryptFontsBook(inpath, outpath):
                     if path == "mimetype":
                         # mimetype must not be compressed
                         zi.compress_type = ZIP_STORED
-                    
+
                     elif path == "META-INF/encryption.xml":
-                        # Check if there's still other entries not related to fonts
-                        if (decryptor.check_if_remaining()):
-                            data = decryptor.get_xml()
-                            print("FontDecrypt: There's remaining entries in encryption.xml, adding file ...")
-                        else: 
+                        if not (decryptor.check_if_remaining()):
                             # No remaining entries, no need for that file.
                             continue
 
+                        data = decryptor.get_xml()
+                        print("FontDecrypt: There's remaining entries in encryption.xml, adding file ...")
                     try:
                         # get the file info, including time-stamp
                         oldzi = inf.getinfo(path)
